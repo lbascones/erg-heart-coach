@@ -13,11 +13,15 @@ import { remindersEnabled, scheduleReminder, sendTestNotification } from './noti
 import { attachTooltips, renderProgress } from './progress';
 import { loadHistory, Session, updateSession, type Phase, type SessionSummary } from './session';
 import {
+  ageOn,
   defaultsForAge,
+  limitsMatchAge,
   loadSettings,
+  refreshAgeLimits,
   saveSettings,
   settingsAreDefaults,
   validate,
+  withLimitsSource,
   type Settings,
 } from './settings';
 import { PM4Source } from './sources/pm4';
@@ -45,6 +49,8 @@ alarm.enabled = settings.sound;
 const session = new Session(settings);
 const trainer = loadTrainer();
 let welcomeBack = applyLayoff(trainer, Date.now());
+/** Shown on the home screen after a birthday moved the estimated heart-rate limits. */
+let birthdayNotice: string | null = null;
 let source: RowerSource | null = null;
 let lastSample: RowerSample | null = null;
 const hrPoints: HrPoint[] = [];
@@ -133,7 +139,8 @@ async function useSource(src: RowerSource, interactive: boolean) {
   await src.start(interactive);
   el.connectOverlay.hidden = true;
   el.simPanel.hidden = !(src instanceof SimulatorSource);
-  if (settingsAreDefaults()) openSettings();
+  // First run, or settings from before birth dates were asked for.
+  if (settingsAreDefaults() || !settings.birthDate) openSettings();
 }
 
 function onStatus(status: ConnectionStatus, message?: string) {
@@ -245,6 +252,7 @@ function startSession(plan: SessionPlan) {
   curves.length = 0;
   drawForceCurves(el.forceChart, curves);
   welcomeBack = null;
+  birthdayNotice = null;
   session.start(plan);
 }
 
@@ -280,12 +288,13 @@ function guidance(zone: Zone, today: Today): [string, string] {
         return [
           today.text,
           waiting ||
+            birthdayNotice ||
             welcomeBack ||
             shortBreak ||
             `Plus ${s.warmupMinutes} min warm-up and ${s.cooldownMinutes} min cool-down. Heart rate OK, ready when you are.`,
         ];
       default:
-        return [today.text, waiting || welcomeBack || ''];
+        return [today.text, waiting || birthdayNotice || welcomeBack || ''];
     }
   }
 
@@ -332,6 +341,7 @@ function update() {
   if (session.phase === 'idle' && now - lastLayoffCheck >= 60_000) {
     lastLayoffCheck = now;
     welcomeBack = applyLayoff(trainer, now);
+    checkBirthday();
   }
 
   if (now - lastSessionTick >= 1000) {
@@ -438,21 +448,67 @@ async function scheduleNextReminder() {
 }
 
 // ---------- Settings ----------
-const NUMBER_FIELDS = ['age', 'maxHr', 'targetLow', 'targetHigh', 'ceiling', 'warmupMinutes', 'cooldownMinutes', 'reminderHour'];
+const NUMBER_FIELDS = ['maxHr', 'targetLow', 'targetHigh', 'ceiling', 'warmupMinutes', 'cooldownMinutes', 'reminderHour'];
+
+/** Age given by the birth date currently in the form; used to keep estimated limits in step while editing. */
+let formAge: number | null = null;
+
+function localIsoDate(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function showFormAge(age: number | null) {
+  $('age-display').textContent = age !== null && age >= 0 ? `(age ${age})` : '';
+}
 
 function fillForm(s: Settings) {
   const f = el.settingsForm.elements as any;
   for (const key of NUMBER_FIELDS) f[key].value = String((s as any)[key]);
+  f.birthDate.value = s.birthDate;
+  f.birthDate.max = localIsoDate(new Date());
   f.sound.checked = s.sound;
   f.ntfyTopic.value = s.ntfyTopic;
   f.ntfyServer.value = s.ntfyServer;
+  formAge = ageOn(s.birthDate) ?? s.limitsFromAge;
+  showFormAge(ageOn(s.birthDate));
 }
 
 function readForm(): Settings {
   const f = el.settingsForm.elements as any;
-  const out: any = { sound: f.sound.checked, ntfyTopic: f.ntfyTopic.value.trim(), ntfyServer: f.ntfyServer.value.trim() };
+  const out: any = {
+    birthDate: f.birthDate.value,
+    limitsFromAge: settings.limitsFromAge, // worked out again on save
+    sound: f.sound.checked,
+    ntfyTopic: f.ntfyTopic.value.trim(),
+    ntfyServer: f.ntfyServer.value.trim(),
+  };
   for (const key of NUMBER_FIELDS) out[key] = Number(f[key].value);
   return out as Settings;
+}
+
+/** Makes new settings live everywhere and saves them. */
+function applySettings(next: Settings) {
+  settings = next;
+  saveSettings(settings);
+  tracker.setSettings(settings);
+  session.setSettings(settings);
+  alarm.enabled = settings.sound;
+  layoutZoneBar();
+  drawHrChart(el.hrChart, hrPoints, settings, Date.now());
+  void scheduleNextReminder();
+  void backupNow();
+}
+
+/** On a birthday, move estimated limits to the new age (only between sessions; hand-entered limits stay). */
+function checkBirthday() {
+  if (session.phase !== 'idle') return;
+  const next = refreshAgeLimits(settings);
+  if (!next) return;
+  applySettings(next);
+  birthdayNotice =
+    `Happy birthday! Your estimated heart-rate limits now match age ${next.limitsFromAge}: ` +
+    `target ${next.targetLow}–${next.targetHigh}, limit ${next.ceiling}. If your doctor gave you limits, enter them in Settings.`;
 }
 
 function openSettings() {
@@ -466,7 +522,25 @@ $('btn-settings').addEventListener('click', openSettings);
 $('btn-settings-cancel').addEventListener('click', () => el.settingsDialog.close());
 $('btn-estimate').addEventListener('click', () => {
   const current = readForm();
-  fillForm({ ...current, ...defaultsForAge(current.age) });
+  const age = ageOn(current.birthDate);
+  if (age === null || age < 10 || age > 110) {
+    el.settingsError.textContent = 'Enter your birth date first.';
+    el.settingsError.hidden = false;
+    return;
+  }
+  el.settingsError.hidden = true;
+  fillForm({ ...current, ...defaultsForAge(age) });
+});
+// Changing the birth date keeps estimated limits in step; hand-entered limits are left alone.
+(el.settingsForm.elements.namedItem('birthDate') as HTMLInputElement).addEventListener('change', () => {
+  const current = readForm();
+  const age = ageOn(current.birthDate);
+  showFormAge(age);
+  if (age === null || age < 10 || age > 110) return;
+  if (formAge !== null && formAge !== age && limitsMatchAge(current, formAge)) {
+    fillForm({ ...current, ...defaultsForAge(age) });
+  }
+  formAge = age;
 });
 $('btn-test-sound').addEventListener('click', () => {
   alarm.unlock();
@@ -500,15 +574,8 @@ el.settingsForm.addEventListener('submit', (e) => {
     el.settingsError.hidden = false;
     return;
   }
-  settings = next;
-  saveSettings(settings);
-  tracker.setSettings(settings);
-  session.setSettings(settings);
-  alarm.enabled = settings.sound;
-  layoutZoneBar();
-  drawHrChart(el.hrChart, hrPoints, settings, Date.now());
-  void scheduleNextReminder();
-  void backupNow();
+  applySettings(withLimitsSource(next));
+  birthdayNotice = null;
 });
 
 // ---------- Summary and feedback ----------
@@ -693,6 +760,7 @@ void scheduleNextReminder();
 
 (async () => {
   await offerRestoreIfEmpty();
+  checkBirthday();
   const params = new URLSearchParams(location.search);
   if (params.has('sim')) {
     await useSource(new SimulatorSource(), false);

@@ -93,9 +93,11 @@
           These numbers matter. The defaults are general estimates for your age, not medical advice.
           Ask your doctor for your own limits, especially if you take heart or blood-pressure medication
           (for example beta-blockers), which change heart rate.
+          Estimated limits follow your birthdays automatically; limits you type in yourself are never changed.
         </p>
         <div class="form-grid">
-          <label>Age <input name="age" type="number" min="10" max="110" required /></label>
+          <label><span>Birth date <span id="age-display"></span></span>
+            <input name="birthDate" type="date" min="1910-01-01" required /></label>
           <button type="button" id="btn-estimate" class="small">Fill estimates from age</button>
           <label>Max heart rate <input name="maxHr" type="number" min="80" max="230" required /></label>
           <label>Target zone, low <input name="targetLow" type="number" min="40" max="220" required /></label>
