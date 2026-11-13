@@ -112,10 +112,8 @@ screws) and drop the new one in. Guides: [bottom cover](https://ifixit.com/Guide
 - Boot the installer with **F12** (if F12 does nothing: F2 → Main → turn on **F12 Boot Menu**, save with F10).
 - Choose **Erase disk and install** on the new drive, and turn on **automatic login**, so the laptop goes
   straight to the app instead of a password screen.
-- **To check during app setup:**
-  - Chromium on Ubuntu is a snap (a sandboxed package). It may need extra permission to reach the PM4 over USB,
-    and its policy folder may differ from step 4 below.
-  - Ubuntu's own Node.js may be older than 20. If so, install a current version from Node's own packages.
+- The minimal install has no browser: the setup below installs Google Chrome (not the Chromium snap, whose sandbox
+  can block USB access).
 
 ### Placing it at the rower
 
@@ -136,46 +134,78 @@ Don't mount the laptop on the rower: it's too heavy for the monitor arm, would h
 
 ## Setting up the laptop
 
-1. Install Xubuntu (see above), Node.js 20+, and Chromium.
-2. Get the code and build it:
+1. **Software.** Google Chrome is used instead of Chromium: Ubuntu only ships Chromium as a snap, whose sandbox can
+   block USB access. The minimal Xubuntu has no browser and may lack font settings.
+   ```sh
+   sudo apt update && sudo apt upgrade -y
+   sudo apt install -y git curl wget nodejs npm
+   sudo apt install --reinstall -y fontconfig fontconfig-config fonts-dejavu-core && fc-cache -f
+   wget -P /tmp https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+   sudo apt install -y /tmp/google-chrome-stable_current_amd64.deb
+   node -v   # must be v20 or newer
+   ```
+   If `apt` can't find `nodejs`, enable the universe source first: `sudo add-apt-repository universe && sudo apt update`.
+2. **Get the code and build it.** For a private repo, sign in first: `sudo apt install -y gh`, `gh auth login`
+   (GitHub.com, HTTPS, yes, log in with a web browser; Google sign-in works there), then `gh auth setup-git`.
    ```sh
    git clone https://github.com/lbascones/erg-heart-coach.git ~/erg-heart-coach
    cd ~/erg-heart-coach && npm install && npm run build
    ```
    To update later: `cd ~/erg-heart-coach && git pull && npm install && npm run build`, then
    `systemctl --user restart rowing`.
-3. Allow the browser to open the PM4 without root. Create `/etc/udev/rules.d/50-concept2.rules`:
+   Quick test without the steps below: `node server.js` in one terminal (leave it open), then open
+   http://localhost:4173/?sim in Chrome.
+3. **Let the browser open the PM4 without root:**
+   ```sh
+   echo 'SUBSYSTEM=="hidraw", ATTRS{idVendor}=="17a4", MODE="0660", TAG+="uaccess"' | sudo tee /etc/udev/rules.d/50-concept2.rules
+   sudo udevadm control --reload && sudo udevadm trigger
    ```
-   SUBSYSTEM=="hidraw", ATTRS{idVendor}=="17a4", MODE="0660", TAG+="uaccess"
+   then replug the PM4.
+4. **Pre-approve the PM4** so Chrome never shows a USB picker:
+   ```sh
+   sudo mkdir -p /etc/opt/chrome/policies/managed
+   echo '{ "WebHidAllowDevicesForUrls": [ { "devices": [ { "vendor_id": 6052 } ], "urls": [ "http://localhost:4173" ] } ] }' | sudo tee /etc/opt/chrome/policies/managed/rowing.json
    ```
-   then `sudo udevadm control --reload && sudo udevadm trigger`, and replug the PM4.
-4. Optional: pre-approve the PM4 so no USB picker is ever needed. Create
-   `/etc/chromium/policies/managed/rowing.json`:
-   ```json
-   { "WebHidAllowDevicesForUrls": [ { "devices": [ { "vendor_id": 6052 } ], "urls": [ "http://localhost:4173" ] } ] }
-   ```
-5. Run the app server at startup. It serves the app on http://localhost:4173 and saves backups to
-   `~/rowing-backups`. Create `~/.config/systemd/user/rowing.service` (adjust the folder path):
-   ```ini
+   Check it at `chrome://policy` in Chrome.
+5. **Run the app server at startup.** It serves the app on http://localhost:4173 and saves backups to
+   `~/rowing-backups`.
+   ```sh
+   mkdir -p ~/.config/systemd/user
+   cat > ~/.config/systemd/user/rowing.service <<'EOF'
    [Unit]
-   Description=Rowing display
+   Description=Erg Heart Coach server
 
    [Service]
    WorkingDirectory=%h/erg-heart-coach
    ExecStart=/usr/bin/node server.js
-   # Copy backups to Google Drive after each save (see "Google Drive backups" below). Remove if not used.
-   Environment=ROWING_AFTER_BACKUP=rclone copy %h/rowing-backups gdrive:rowing-backups
+   # Copy backups to Google Drive after each save (see "Google Drive backups" below). Add once rclone is set up.
+   #Environment=ROWING_AFTER_BACKUP=rclone copy %h/rowing-backups gdrive:rowing-backups
    Restart=always
 
    [Install]
    WantedBy=default.target
+   EOF
+   systemctl --user daemon-reload
+   systemctl --user enable --now rowing
+   systemctl --user status rowing   # should say "active (running)"
    ```
-   then `systemctl --user enable --now rowing`.
-6. Start Chromium in kiosk mode at login:
+6. **Open the app full-screen at login.** It waits until the server answers, then starts Chrome in kiosk mode.
+   `--autoplay-policy` lets alarms sound before anyone touches the screen. Exit kiosk mode with **Alt+F4**.
    ```sh
-   chromium --kiosk --autoplay-policy=no-user-gesture-required http://localhost:4173
+   mkdir -p ~/.config/autostart
+   cat > ~/.config/autostart/erg-heart-coach.desktop <<'EOF'
+   [Desktop Entry]
+   Type=Application
+   Name=Erg Heart Coach
+   Exec=sh -c 'until curl -s -o /dev/null http://localhost:4173; do sleep 1; done; exec google-chrome --kiosk --no-first-run --noerrdialogs --disable-session-crashed-bubble --autoplay-policy=no-user-gesture-required http://localhost:4173'
+   EOF
    ```
-   (`--autoplay-policy` lets alarms sound before anyone touches the screen.)
+7. **Keep the screen on.** Settings → Power Manager → Display: set blanking and sleep to **Never** when plugged in.
+   On the Security tab, turn off automatic screen locking. Under General, set the power button to **Shutdown**.
+8. Turn on automatic login if it wasn't chosen during install, then restart. The app should open by itself.
+
+**After a session:** save your rating in the summary (that saves the session and makes the backup), then press the
+power button briefly to shut down cleanly. Don't hold the button down.
 
 ## Backups
 
