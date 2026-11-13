@@ -1,8 +1,8 @@
 # Erg Heart Coach
 
-A heart-rate-first display for a Concept2 rower with a **PM4** monitor. It runs in Chrome/Chromium,
-talks to the PM4 over USB (WebHID) through [ErgometerJS](https://github.com/tijmenvangulik/ErgometerJS),
-and gets heart rate from the strap paired to the PM4.
+A heart-rate-first display for a Concept2 rower with a **PM3 or PM4** monitor. It runs in Chrome/Chromium,
+talks to the monitor over USB (WebHID) through [ErgometerJS](https://github.com/tijmenvangulik/ErgometerJS),
+and gets heart rate from the strap paired to the monitor.
 
 > **Not a medical device.** Heart-rate limits come from you (ideally from your doctor). The app is a
 > helper, not a substitute for listening to your body: stop if you feel dizzy, short of breath or chest discomfort.
@@ -16,7 +16,7 @@ npm run dev        # open http://localhost:5173
 
 - **Use simulator** fakes a rower and heart rate. Keys: `↑/↓` effort, `Space` stop/row, `H` drop HR signal.
   Opening `http://localhost:5173/?sim` starts the simulator directly.
-- **Connect PM4 (USB)** shows Chrome's USB picker. After the first time, the app reconnects by itself.
+- **Connect monitor (USB)** shows Chrome's USB picker. After the first time, the app reconnects by itself.
 
 ## What it does
 
@@ -87,7 +87,7 @@ i5-3337U, 4 GB RAM (enough; a memory upgrade is optional), one 2.5" SATA drive b
 - **Setup screen (BIOS):** Boot Mode changed from Legacy to **UEFI**. Leave it on UEFI.
 - **Live-USB test passed** (Xubuntu running from a USB stick): screen, touchscreen, Wi-Fi, sound and charging all work.
 - **Not checked yet:** the PM4 over USB (the rower is in the basement). Check it during app setup:
-  `lsusb | grep -i 17a4` should show `17a4:0002`, and `ls /dev/hidraw*` should list a device.
+  `lsusb | grep -i 17a4` should show `17a4:0001` (PM3) or `17a4:0002` (PM4), and `ls /dev/hidraw*` should list a device.
 
 ### The replacement drive
 

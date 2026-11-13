@@ -36,7 +36,7 @@ export class SimulatorSource extends RowerSource {
     this.lastTick = performance.now();
     this.timer = window.setInterval(() => this.tick(), 50);
     window.addEventListener('keydown', this.onKey);
-    this.emit('status', 'connected', 'Simulated PM4');
+    this.emit('status', 'connected', 'Simulated monitor');
   }
 
   stop(): void {

@@ -17,7 +17,7 @@ const HR_POLL_MS = 1000;
 const RECONNECT_MS = 3000;
 
 export class PM4Source extends RowerSource {
-  readonly name = 'Concept2 PM4 (USB)';
+  readonly name = 'Concept2 monitor (USB)';
   private pm: any = null;
   private hrTimer: number | undefined;
   private reconnectTimer: number | undefined;
@@ -125,6 +125,10 @@ export class PM4Source extends RowerSource {
         this.scheduleReconnect();
       }
     });
+
+    // ErgometerJS only starts its USB polling loop if someone listens to strokeStateEvent or
+    // trainingDataEvent (strokeDataEvent alone is not enough), so keep a listener on one of them.
+    pm.trainingDataEvent.sub(this, () => {});
 
     pm.strokeDataEvent.sub(this, (d: any) => {
       const now = Date.now();
