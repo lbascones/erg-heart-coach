@@ -639,8 +639,7 @@ function showSummary(s: SessionSummary) {
     </div>`;
   selectedRpe = 0;
   el.rpeButtons.querySelectorAll('button').forEach((x) => x.classList.remove('selected'));
-  el.symptoms.checked = reportUnwell;
-  reportUnwell = false;
+  el.symptoms.checked = false;
   el.feedback.hidden = false;
   el.verdict.hidden = true;
   el.feedbackSave.hidden = false;
@@ -665,9 +664,6 @@ el.feedbackSave.addEventListener('click', () => {
 });
 
 // ---------- Cancelling a session ----------
-/** Set when "I don't feel well" ends a session, so the summary arrives with the symptoms box ticked. */
-let reportUnwell = false;
-
 function refreshActions() {
   renderedActionsKey = '';
   update();
@@ -677,18 +673,9 @@ $('btn-cancel-keep').addEventListener('click', () => el.cancelDialog.close());
 $('btn-cancel-discard').addEventListener('click', () => {
   el.cancelDialog.close();
   if (session.phase === 'idle' || session.phase === 'done') return;
-  reportUnwell = false;
   session.reset();
   curves.length = 0;
   drawForceCurves(el.forceChart, curves);
-  refreshActions();
-});
-// Feeling unwell: end now, skip the cool-down, and go to the summary with symptoms pre-ticked.
-$('btn-cancel-unwell').addEventListener('click', () => {
-  el.cancelDialog.close();
-  if (session.phase === 'idle' || session.phase === 'done') return;
-  reportUnwell = true;
-  session.finish(); // rowing -> 60 s recovery check (sit still); recovery -> summary
   refreshActions();
 });
 
