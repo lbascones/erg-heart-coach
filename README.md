@@ -135,7 +135,13 @@ Don't mount the laptop on the rower: it's too heavy for the monitor arm, would h
 ## Setting up the laptop
 
 1. Install Xubuntu (see above), Node.js 20+, and Chromium.
-2. Copy this folder over, then `npm install && npm run build`.
+2. Get the code and build it:
+   ```sh
+   git clone https://github.com/lbascones/erg-heart-coach.git ~/erg-heart-coach
+   cd ~/erg-heart-coach && npm install && npm run build
+   ```
+   To update later: `cd ~/erg-heart-coach && git pull && npm install && npm run build`, then
+   `systemctl --user restart rowing`.
 3. Allow the browser to open the PM4 without root. Create `/etc/udev/rules.d/50-concept2.rules`:
    ```
    SUBSYSTEM=="hidraw", ATTRS{idVendor}=="17a4", MODE="0660", TAG+="uaccess"
