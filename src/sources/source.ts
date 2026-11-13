@@ -1,3 +1,5 @@
+import { diag } from '../diagnostics';
+
 /** One snapshot of rowing data from the monitor. */
 export interface RowerSample {
   /** Wall-clock time the sample was received (ms since epoch). */
@@ -44,6 +46,7 @@ export abstract class RowerSource {
   }
 
   protected emit<K extends keyof SourceEvents>(event: K, ...args: Parameters<SourceEvents[K]>): void {
+    diag.log(event, { args });
     for (const fn of this.listeners[event]) {
       try {
         (fn as (...a: Parameters<SourceEvents[K]>) => void)(...args);

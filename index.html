@@ -14,6 +14,7 @@
       <div class="conn"><span id="conn-dot" class="dot"></span><span id="conn-text">Not connected</span></div>
       <div id="phase-name">Ready</div>
       <div class="top-actions">
+        <button id="btn-diag-rec" class="ghost rec" hidden>● Recording</button>
         <button id="btn-fullscreen" class="ghost" title="Full screen">⛶</button>
         <button id="btn-progress" class="ghost">Progress</button>
         <button id="btn-settings" class="ghost">Settings</button>
@@ -83,6 +84,7 @@
         </div>
         <p id="connect-error" class="error" hidden></p>
         <p class="fine">USB needs Chrome, Chromium or Edge. The simulator works in any browser.</p>
+        <p class="fine"><button id="btn-diag-connect" class="small ghost">Diagnostics</button></p>
       </div>
     </div>
 
@@ -123,6 +125,7 @@
         <p id="settings-error" class="error" hidden></p>
         <div class="dialog-buttons">
           <button type="button" id="btn-test-sound" class="small">Test alarm sound</button>
+          <button type="button" id="btn-diag-settings" class="small">Diagnostics</button>
           <span class="spacer"></span>
           <button type="button" id="btn-settings-cancel">Cancel</button>
           <button type="submit" class="primary">Save</button>
@@ -157,6 +160,22 @@
         <span class="spacer"></span>
         <button id="btn-cancel-keep" autofocus>Keep going</button>
         <button id="btn-cancel-discard" class="primary">Discard session</button>
+      </div>
+    </dialog>
+
+    <dialog id="diag-dialog">
+      <h2>Diagnostics</h2>
+      <p class="fine-print">
+        Records what passes between the app and the monitor (connection events, raw USB data, rowing and
+        heart-rate data, errors) until you stop it. Start it, reproduce the problem, then stop it.
+        The file is saved in <code>~/rowing-backups/diagnostics</code> and copied to Google Drive with the backups.
+      </p>
+      <p id="diag-status"></p>
+      <div class="dialog-buttons">
+        <button id="btn-diag-reconnect" class="small">Reconnect monitor</button>
+        <span class="spacer"></span>
+        <button id="btn-diag-close">Close</button>
+        <button id="btn-diag-toggle" class="primary">Start recording</button>
       </div>
     </dialog>
 

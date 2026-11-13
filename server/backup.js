@@ -2,6 +2,7 @@
 //
 //   POST /api/backup         body = backup JSON from the app -> writes rowing-latest.json + rowing-YYYY-MM-DD.json
 //   GET  /api/backup/latest  -> returns rowing-latest.json (404 if none), used to restore a wiped browser
+//   POST /api/diagnostics    body = diagnostics recording -> writes diagnostics/diag-YYYY-MM-DD-HHMMSS.json
 //
 // Files go to $ROWING_BACKUP_DIR (default ~/rowing-backups). File names are chosen here, never by the client.
 // If $ROWING_AFTER_BACKUP is set (e.g. an rclone command), it runs after each successful write.
@@ -11,13 +12,28 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-const MAX_BYTES = 20 * 1024 * 1024;
+const MAX_BYTES = 40 * 1024 * 1024;
 
 export const backupDir = process.env.ROWING_BACKUP_DIR || join(homedir(), 'rowing-backups');
 
+const pad = (n) => String(n).padStart(2, '0');
+
 function localDate(d = new Date()) {
-  const pad = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function localTime(d = new Date()) {
+  return `${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+}
+
+/**
+ * Only the app itself may write: block requests from other websites open in the same browser.
+ * Browsers always send Origin on cross-site POSTs, and requiring JSON forces a CORS preflight we never allow.
+ */
+function fromApp(req) {
+  const origin = req.headers.origin;
+  const contentType = req.headers['content-type'] || '';
+  return (!origin || origin === `http://${req.headers.host}`) && contentType.startsWith('application/json');
 }
 
 /** Write via a temp file + rename, so a power cut never leaves a half-written backup. */
@@ -64,11 +80,7 @@ function runAfterBackup() {
 export async function handleBackup(req, res) {
   const url = (req.url || '').split('?')[0];
   if (url === '/api/backup' && req.method === 'POST') {
-    // Only the app itself may write backups: block requests from other websites open in the same browser.
-    // Browsers always send Origin on cross-site POSTs, and requiring JSON forces a CORS preflight we never allow.
-    const origin = req.headers.origin;
-    const contentType = req.headers['content-type'] || '';
-    if ((origin && origin !== `http://${req.headers.host}`) || !contentType.startsWith('application/json')) {
+    if (!fromApp(req)) {
       send(res, 403, { error: 'Forbidden' });
       return true;
     }
@@ -84,6 +96,27 @@ export async function handleBackup(req, res) {
       runAfterBackup();
     } catch (err) {
       console.error('[backup] failed:', err);
+      send(res, 500, { error: String(err.message || err) });
+    }
+    return true;
+  }
+  if (url === '/api/diagnostics' && req.method === 'POST') {
+    if (!fromApp(req)) {
+      send(res, 403, { error: 'Forbidden' });
+      return true;
+    }
+    try {
+      const data = JSON.parse(await readBody(req));
+      if (data?.app !== 'erg-heart-coach-diagnostics') return send(res, 400, { error: 'Not a diagnostics file' }), true;
+      const dir = join(backupDir, 'diagnostics');
+      await mkdir(dir, { recursive: true });
+      const now = new Date();
+      const file = `diag-${localDate(now)}-${localTime(now)}.json`;
+      await writeAtomic(join(dir, file), JSON.stringify(data));
+      send(res, 200, { ok: true, file, dir });
+      runAfterBackup();
+    } catch (err) {
+      console.error('[diagnostics] failed:', err);
       send(res, 500, { error: String(err.message || err) });
     }
     return true;

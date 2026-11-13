@@ -373,3 +373,7 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 /* ---------- Coach card (idle) ---------- */
 #guide-text.coach { font-size: clamp(1.3rem, 3.4vh, 2rem); font-weight: 600; }
 .guide-sub { color: var(--text-muted); font-size: 1.05rem; margin-top: 4px; }
+
+/* Diagnostics recording indicator */
+button.rec { color: #ff6b6b; border-color: #ff6b6b; }
+#diag-status { min-height: 1.4em; }

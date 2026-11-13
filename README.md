@@ -61,7 +61,7 @@ Reminder text is generic (no name or health data), but it does pass through the 
 
 | File | Purpose |
 |---|---|
-| `src/sources/pm4.ts` | Real PM4 over USB: connect, auto-reconnect, data, force curve, HR polling |
+| `src/sources/pm4.ts` | Real monitor (PM3/PM4) over USB: connect, auto-reconnect, data, force curve, HR polling |
 | `src/sources/simulator.ts` | Fake rower and heart-rate model |
 | `src/heartrate.ts` | Zone logic, signal-loss detection, alarm latching |
 | `src/alarm.ts` | Sound cues (Web Audio, no files) |
@@ -70,7 +70,8 @@ Reminder text is generic (no name or health data), but it does pass through the 
 | `src/progress.ts` | Progress screen charts and tiles |
 | `src/notify.ts` | Scheduled phone reminders through ntfy |
 | `src/backup.ts` | Export, import, automatic backup and restore |
-| `server.js`, `server/backup.js` | Laptop server: serves the app, writes backups, runs the Drive sync |
+| `src/diagnostics.ts` | Diagnostics recorder (raw USB traffic, events, errors) |
+| `server.js`, `server/backup.js` | Laptop server: serves the app, writes backups and diagnostics, runs the Drive sync |
 | `src/charts.ts` | HR trend and force curve drawing |
 | `src/main.ts` | Wires everything to the screen |
 
@@ -153,8 +154,7 @@ Don't mount the laptop on the rower: it's too heavy for the monitor arm, would h
    git clone https://github.com/lbascones/erg-heart-coach.git ~/erg-heart-coach
    cd ~/erg-heart-coach && npm install && npm run build
    ```
-   To update later: `cd ~/erg-heart-coach && git pull && npm install && npm run build`, then
-   `systemctl --user restart rowing`.
+   To update later, see [Updating the app](#updating-the-app).
    Quick test without the steps below: `node server.js` in one terminal (leave it open), then open
    http://localhost:4173/?sim in Chrome.
 3. **Let the browser open the PM4 without root:**
@@ -208,6 +208,40 @@ Don't mount the laptop on the rower: it's too heavy for the monitor arm, would h
 
 **After a session:** save your rating in the summary (that saves the session and makes the backup), then press the
 power button briefly to shut down cleanly. Don't hold the button down.
+
+## Updating the app
+
+When the code on GitHub changes (for example after a fix), bring the laptop up to date:
+
+1. Exit kiosk mode with **Alt+F4**, then open a terminal (Ctrl+Alt+T).
+2. Download, build and restart:
+   ```sh
+   cd ~/erg-heart-coach && git pull && npm install && npm run build && systemctl --user restart rowing
+   ```
+   If the `rowing` service isn't set up yet (step 5 of the setup), start the server by hand instead:
+   `node server.js` in a terminal that stays open.
+3. Restart the laptop (or open http://localhost:4173 in Chrome). The new version loads.
+
+`git pull` only fetches; your sessions, settings and backups are stored elsewhere and are never touched.
+If `git pull` asks for a login, the repo has been made private again: see step 2 of the setup.
+
+## Diagnostics
+
+When something doesn't work with the monitor (no data, dropouts, odd numbers), record a diagnostics file:
+
+1. Open **Settings → Diagnostics** (or **Diagnostics** on the connect screen) and tap **Start recording**.
+   A red **● Recording** button stays in the top bar while it runs.
+2. Reproduce the problem: for example row a few strokes, or tap **Reconnect monitor** to capture the whole
+   connection sequence. To capture start-up too, open the app as http://localhost:4173/?diag.
+3. Tap **● Recording → Stop and save**. The file is written to
+   `~/rowing-backups/diagnostics/diag-YYYY-MM-DD-HHMMSS.json` and copied to Google Drive
+   (`rowing-backups/diagnostics`) right away, if rclone is set up. Without rclone, copy it off with a
+   USB stick.
+
+The file holds the monitor's raw USB traffic, connection and stroke events, the heart rate and rowing data the app
+received, error messages, the USB device details (model, report sizes) and the app version. It doesn't hold your
+settings or session history. Recording stops if the page reloads or the laptop shuts down, and anything not yet
+saved is lost.
 
 ## Backups
 

@@ -7,6 +7,7 @@ import {
   pushBackup,
   sessionCount,
 } from './backup';
+import { diag, saveDiagnostics } from './diagnostics';
 import { drawForceCurves, drawHrChart, type HrPoint } from './charts';
 import { HeartRateTracker, ZONE_LABEL, type Zone } from './heartrate';
 import { remindersEnabled, scheduleReminder, sendTestNotification } from './notify';
@@ -100,6 +101,10 @@ const el = {
   summaryClose: $('btn-summary-close'),
   progressOverlay: $('progress-overlay'),
   chartTip: $('chart-tip'),
+  diagDialog: $<HTMLDialogElement>('diag-dialog'),
+  diagStatus: $('diag-status'),
+  diagToggle: $<HTMLButtonElement>('btn-diag-toggle'),
+  diagRec: $('btn-diag-rec'),
 };
 
 function fmtTime(sec: number): string {
@@ -768,6 +773,68 @@ window.addEventListener('resize', () => {
 });
 // Unlock audio on the first tap anywhere (browsers block sound until then).
 window.addEventListener('pointerdown', () => alarm.unlock(), { once: true });
+
+// ---------- Diagnostics ----------
+let diagMessage = '';
+
+function renderDiag() {
+  el.diagRec.hidden = !diag.active;
+  el.diagToggle.textContent = diag.active ? 'Stop and save' : 'Start recording';
+  if (diag.active) {
+    el.diagStatus.textContent = `Recording for ${fmtTime(diag.elapsedSec)}, ${diag.entryCount.toLocaleString()} entries.`;
+  } else {
+    el.diagStatus.textContent = diagMessage || 'Not recording.';
+  }
+}
+
+function startDiagnostics() {
+  diagMessage = '';
+  diag.start({
+    source: source?.name ?? 'none',
+    connection: el.connText.textContent,
+    phase: session.phase,
+    url: location.href,
+  });
+  renderDiag();
+}
+
+function openDiagnostics() {
+  el.settingsDialog.close();
+  renderDiag();
+  el.diagDialog.showModal();
+}
+
+el.diagToggle.addEventListener('click', async () => {
+  if (!diag.active) return startDiagnostics();
+  const data = diag.stop();
+  diagMessage = 'Saving…';
+  renderDiag();
+  el.diagToggle.disabled = true;
+  const file = await saveDiagnostics(data);
+  el.diagToggle.disabled = false;
+  diagMessage = file
+    ? `Saved as ${file} in ~/rowing-backups/diagnostics. It goes to Google Drive (rowing-backups/diagnostics) if rclone is set up.`
+    : 'No app server here, so the file was downloaded to this browser’s Downloads folder instead.';
+  renderDiag();
+});
+$('btn-diag-close').addEventListener('click', () => el.diagDialog.close());
+$('btn-diag-settings').addEventListener('click', openDiagnostics);
+$('btn-diag-connect').addEventListener('click', openDiagnostics);
+el.diagRec.addEventListener('click', openDiagnostics);
+// Records the whole connection sequence: drop the monitor and connect again from scratch.
+$('btn-diag-reconnect').addEventListener('click', async () => {
+  diag.log('manual-reconnect');
+  el.diagDialog.close();
+  if (await PM4Source.hasGrantedDevice()) {
+    await useSource(new PM4Source(), false).catch(() => (el.connectOverlay.hidden = true));
+  } else {
+    el.connectOverlay.hidden = false;
+  }
+});
+diag.onChange(renderDiag);
+setInterval(() => diag.active && renderDiag(), 1000);
+// Opening the app with ?diag starts recording before anything connects.
+if (new URLSearchParams(location.search).has('diag')) startDiagnostics();
 
 // ---------- Startup ----------
 layoutZoneBar();

@@ -1,3 +1,4 @@
+import { diag, tapHidDevice } from '../diagnostics';
 import { RowerSource } from './source';
 
 /**
@@ -79,6 +80,8 @@ export class PM4Source extends RowerSource {
     try {
       const devices = await pm.requestDevics();
       if (!devices.length) throw new Error('No Concept2 monitor found');
+      tapHidDevice(devices[0]._deviceInfo);
+      diag.log('pm-connecting', { productId: devices[0].productId, productName: devices[0].productName });
       await pm.connectToDevice(devices[0]);
       this.emit('status', 'connected', devices[0].productName);
     } catch (err) {
@@ -112,11 +115,15 @@ export class PM4Source extends RowerSource {
   }
 
   private subscribe(pm: any) {
+    // Debug level, so diagnostics get ErgometerJS's own notes; only errors go to the console.
+    pm.logLevel = 2;
     pm.logEvent.sub(this, (text: string, level: number) => {
       if (level === 0) console.warn('[ergometer]', text);
+      else diag.log('ergometer', { level, text: String(text) });
     });
 
     pm.connectionStateChangedEvent.sub(this, (oldState: number, newState: number) => {
+      diag.log('pm-state', { oldState, newState });
       if (pm !== this.pm) return;
       if (oldState === READY_FOR_COMMUNICATION && newState !== READY_FOR_COMMUNICATION) {
         // PM went to sleep or the cable was unplugged.
@@ -128,7 +135,12 @@ export class PM4Source extends RowerSource {
 
     // ErgometerJS only starts its USB polling loop if someone listens to strokeStateEvent or
     // trainingDataEvent (strokeDataEvent alone is not enough), so keep a listener on one of them.
-    pm.trainingDataEvent.sub(this, () => {});
+    pm.trainingDataEvent.sub(this, (t: any) =>
+      diag.log('training-data', { workoutState: t.workoutState, workoutType: t.workoutType, distance: t.distance, duration: t.duration }),
+    );
+    pm.strokeStateEvent.sub(this, (oldState: number, newState: number, duration: number) =>
+      diag.log('stroke-state', { oldState, newState, duration }),
+    );
 
     pm.strokeDataEvent.sub(this, (d: any) => {
       const now = Date.now();
