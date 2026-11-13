@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Erg Heart Coach</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>❤️</text></svg>" />
+    <link rel="stylesheet" href="/src/style.css" />
+    <!-- ErgometerJS (Concept2 PM driver) is a global script, copied here by `npm install`. -->
+    <script src="/lib/ergometer.js"></script>
+  </head>
+  <body class="zone-nosignal">
+    <header id="topbar">
+      <div class="conn"><span id="conn-dot" class="dot"></span><span id="conn-text">Not connected</span></div>
+      <div id="phase-name">Ready</div>
+      <div class="top-actions">
+        <button id="btn-fullscreen" class="ghost" title="Full screen">⛶</button>
+        <button id="btn-progress" class="ghost">Progress</button>
+        <button id="btn-settings" class="ghost">Settings</button>
+      </div>
+    </header>
+
+    <main id="dash">
+      <section id="hr-panel" class="panel">
+        <div class="hr-row">
+          <span id="hr-value">--</span><span class="hr-unit">bpm</span>
+        </div>
+        <div id="hr-zone-label">NO HEART RATE</div>
+        <div id="zone-bar">
+          <div class="seg easy"></div>
+          <div class="seg target"></div>
+          <div class="seg high"></div>
+          <div class="seg over"></div>
+          <div id="zone-marker"></div>
+        </div>
+        <div id="hr-limits"></div>
+      </section>
+
+      <section id="metrics" class="panel">
+        <div class="metric"><div class="m-label">Pace /500m</div><div class="m-value" id="m-pace">--</div></div>
+        <div class="metric"><div class="m-label">Watts</div><div class="m-value" id="m-power">--</div></div>
+        <div class="metric"><div class="m-label">Strokes/min</div><div class="m-value" id="m-spm">--</div></div>
+        <div class="metric"><div class="m-label">Distance</div><div class="m-value" id="m-distance">--</div></div>
+        <div class="metric"><div class="m-label">Session time</div><div class="m-value" id="m-time">--</div></div>
+        <div class="metric"><div class="m-label">Calories</div><div class="m-value" id="m-cal">--</div></div>
+      </section>
+
+      <section id="guidance" class="panel">
+        <div class="guide-main">
+          <div>
+            <div id="guide-text">Put on your heart-rate strap, then press Start.</div>
+            <div id="guide-sub" class="guide-sub" hidden></div>
+          </div>
+          <div id="phase-timer"></div>
+        </div>
+        <div id="phase-actions"></div>
+      </section>
+
+      <section id="charts">
+        <div class="panel chart"><h3>Heart rate, last 10 minutes</h3><canvas id="hr-chart"></canvas></div>
+        <div class="panel chart"><h3>Force curve</h3><canvas id="force-chart"></canvas></div>
+      </section>
+    </main>
+
+    <div id="alert-banner" hidden></div>
+
+    <div id="sim-panel" hidden>
+      <span class="sim-title">Simulator</span>
+      <button data-sim="down">Easier ↓</button>
+      <span id="sim-effort"></span>
+      <button data-sim="up">Harder ↑</button>
+      <button data-sim="pause">Stop/row (Space)</button>
+      <button data-sim="hr">Drop HR (H)</button>
+    </div>
+
+    <div id="connect-overlay" class="overlay">
+      <div class="overlay-card">
+        <h1>Erg Heart Coach</h1>
+        <p>Connect your Concept2 monitor with a USB cable, then tap Connect.</p>
+        <div class="overlay-buttons">
+          <button id="btn-connect-pm" class="primary big">Connect PM4 (USB)</button>
+          <button id="btn-connect-sim" class="big">Use simulator</button>
+        </div>
+        <p id="connect-error" class="error" hidden></p>
+        <p class="fine">USB needs Chrome, Chromium or Edge. The simulator works in any browser.</p>
+      </div>
+    </div>
+
+    <dialog id="settings-dialog">
+      <form id="settings-form" method="dialog">
+        <h2>Heart-rate limits</h2>
+        <p class="notice">
+          These numbers matter. The defaults are general estimates for your age, not medical advice.
+          Ask your doctor for your own limits, especially if you take heart or blood-pressure medication
+          (for example beta-blockers), which change heart rate.
+        </p>
+        <div class="form-grid">
+          <label>Age <input name="age" type="number" min="10" max="110" required /></label>
+          <button type="button" id="btn-estimate" class="small">Fill estimates from age</button>
+          <label>Max heart rate <input name="maxHr" type="number" min="80" max="230" required /></label>
+          <label>Target zone, low <input name="targetLow" type="number" min="40" max="220" required /></label>
+          <label>Target zone, high <input name="targetHigh" type="number" min="40" max="220" required /></label>
+          <label>Ceiling (alarm) <input name="ceiling" type="number" min="40" max="230" required /></label>
+          <label>Warm-up minutes <input name="warmupMinutes" type="number" min="0" max="30" required /></label>
+          <label>Cool-down minutes <input name="cooldownMinutes" type="number" min="0" max="30" required /></label>
+          <label class="check"><input name="sound" type="checkbox" /> Sound alerts</label>
+        </div>
+        <h2>Phone reminders</h2>
+        <p class="fine-print">
+          Install the free <b>ntfy</b> app on your phone and subscribe to a topic name only you know
+          (e.g. <code>row-k7f2q9</code>). Enter the same name here. Leave it empty to turn reminders off.
+          Reminder text is generic and passes through the ntfy server.
+        </p>
+        <div class="form-grid">
+          <label>Topic name <input name="ntfyTopic" type="text" autocomplete="off" spellcheck="false" /></label>
+          <label>Reminder hour (0–23) <input name="reminderHour" type="number" min="0" max="23" required /></label>
+          <label>Server <input name="ntfyServer" type="text" spellcheck="false" /></label>
+          <button type="button" id="btn-test-notify" class="small">Send test notification</button>
+        </div>
+        <p id="notify-status" class="fine-print" hidden></p>
+        <p id="settings-error" class="error" hidden></p>
+        <div class="dialog-buttons">
+          <button type="button" id="btn-test-sound" class="small">Test alarm sound</button>
+          <span class="spacer"></span>
+          <button type="button" id="btn-settings-cancel">Cancel</button>
+          <button type="submit" class="primary">Save</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="summary-dialog">
+      <h2>Session complete</h2>
+      <div id="summary-body"></div>
+      <div id="feedback">
+        <div class="m-label">How hard did that feel?</div>
+        <div id="rpe-buttons"></div>
+        <div class="rpe-scale"><span>very easy</span><span>moderate</span><span>very hard</span></div>
+        <label class="symptom-check">
+          <input type="checkbox" id="symptoms" />
+          I had chest pain or pressure, dizziness, palpitations, or unusual shortness of breath
+        </label>
+      </div>
+      <p id="coach-verdict" hidden></p>
+      <div class="dialog-buttons">
+        <span class="spacer"></span>
+        <button id="btn-feedback-save" class="primary" disabled>Save</button>
+        <button id="btn-summary-close" class="primary" hidden>Done</button>
+      </div>
+    </dialog>
+
+    <div id="progress-overlay" class="overlay" hidden>
+      <div class="progress-wrap">
+        <div class="progress-head">
+          <h2>Your progress</h2>
+          <span class="spacer"></span>
+          <span id="backup-status" class="fine-print"></span>
+          <button id="btn-export" class="small">Export data</button>
+          <button id="btn-import" class="small">Import data</button>
+          <input id="import-file" type="file" accept="application/json,.json" hidden />
+          <button id="btn-progress-close" class="primary">Close</button>
+        </div>
+        <div id="progress-tiles"></div>
+        <div class="progress-grid">
+          <div class="panel chart">
+            <h3>Fitness check: watts at <span id="test-hr"></span> bpm <em>(higher = fitter)</em></h3>
+            <canvas id="pc-check"></canvas>
+          </div>
+          <div class="panel chart">
+            <h3>Average watts while in your target zone <em>(higher = fitter)</em></h3>
+            <canvas id="pc-target"></canvas>
+          </div>
+          <div class="panel chart">
+            <h3>Heart-rate drop in the 60 s after stopping, bpm <em>(bigger = fitter)</em></h3>
+            <canvas id="pc-recovery"></canvas>
+          </div>
+          <div class="panel chart">
+            <h3>Minutes rowed per week (main set)</h3>
+            <canvas id="pc-weekly"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="chart-tip" hidden></div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,373 @@
+:root {
+  --bg: #0b0f14;
+  --panel: rgba(255, 255, 255, 0.06);
+  --panel-border: rgba(255, 255, 255, 0.1);
+  --text: #f5f7fa;
+  --text-muted: #9aa4b2;
+  --accent: #38bdf8;
+
+  --easy: #3b82f6;
+  --target: #22c55e;
+  --high: #f59e0b;
+  --over: #ef4444;
+  --nosignal: #a1a1aa;
+
+  --band-target: rgba(34, 197, 94, 0.18);
+  --band-over: rgba(239, 68, 68, 0.18);
+
+  --zone-bg: #1f2329;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* The whole screen takes the zone color, so it can be read out of the corner of your eye. */
+body {
+  background: radial-gradient(ellipse at 20% 0%, var(--zone-bg), var(--bg) 70%);
+  transition: background 0.6s;
+}
+body.zone-easy { --zone-bg: #10284a; --zone: var(--easy); }
+body.zone-target { --zone-bg: #0d3b22; --zone: var(--target); }
+body.zone-high { --zone-bg: #4a2e06; --zone: var(--high); }
+body.zone-over { --zone-bg: #5c0f0f; --zone: var(--over); animation: flash-over 1s steps(2) infinite; }
+body.zone-nosignal { --zone-bg: #2a2a30; --zone: var(--nosignal); }
+
+@keyframes flash-over {
+  0% { background-color: #7f1d1d; }
+  100% { background-color: var(--bg); }
+}
+body.zone-over { background: #7f1d1d; }
+
+button {
+  font: inherit;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 0.6em 1.1em;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+button:hover { background: rgba(255, 255, 255, 0.16); }
+button.primary { background: var(--accent); color: #04121c; border-color: transparent; font-weight: 600; }
+button.ghost { background: transparent; }
+button.big { font-size: 1.4rem; padding: 0.8em 1.6em; }
+button.small { font-size: 0.9rem; padding: 0.4em 0.8em; }
+button.huge { font-size: 2rem; padding: 0.6em 1.6em; border-radius: 16px; }
+
+/* ---------- Layout ---------- */
+#topbar {
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  font-size: 1.1rem;
+}
+.conn { display: flex; align-items: center; gap: 10px; color: var(--text-muted); min-width: 260px; }
+.dot { width: 14px; height: 14px; border-radius: 50%; background: var(--nosignal); }
+.dot.connected { background: var(--target); }
+.dot.connecting { background: var(--high); }
+.dot.error, .dot.disconnected { background: var(--over); }
+#phase-name { font-size: 1.4rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+.top-actions { display: flex; gap: 8px; min-width: 260px; justify-content: flex-end; }
+
+#dash {
+  height: calc(100% - 56px);
+  padding: 0 16px 16px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  grid-template-rows: minmax(0, 1.25fr) auto minmax(0, 1fr);
+  grid-template-areas:
+    'hr metrics'
+    'guide guide'
+    'charts charts';
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 18px;
+  backdrop-filter: blur(4px);
+}
+
+/* ---------- Heart rate ---------- */
+#hr-panel {
+  grid-area: hr;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 12px 24px;
+  border: 3px solid var(--zone);
+}
+.hr-row { display: flex; align-items: baseline; gap: 10px; }
+#hr-value {
+  font-size: clamp(5rem, 15vh, 11rem);
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.hr-unit { font-size: 1.6rem; color: var(--text-muted); }
+#hr-zone-label {
+  margin-top: 6px;
+  font-size: clamp(1.4rem, 3.5vh, 2.2rem);
+  font-weight: 700;
+  color: var(--zone);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+#zone-bar {
+  position: relative;
+  width: 100%;
+  max-width: 520px;
+  height: 18px;
+  margin-top: 16px;
+  display: flex;
+  border-radius: 9px;
+  overflow: visible;
+}
+#zone-bar .seg { height: 100%; }
+#zone-bar .seg:first-child { border-radius: 9px 0 0 9px; }
+#zone-bar .seg:nth-child(4) { border-radius: 0 9px 9px 0; }
+#zone-bar .easy { background: var(--easy); }
+#zone-bar .target { background: var(--target); }
+#zone-bar .high { background: var(--high); }
+#zone-bar .over { background: var(--over); }
+#zone-marker {
+  position: absolute;
+  top: -8px;
+  width: 6px;
+  height: 34px;
+  margin-left: -3px;
+  background: var(--text);
+  border-radius: 3px;
+  box-shadow: 0 0 0 2px var(--bg);
+  transition: left 0.5s;
+}
+#hr-limits { margin-top: 12px; color: var(--text-muted); font-size: 1.05rem; }
+
+/* ---------- Rowing metrics ---------- */
+#metrics {
+  grid-area: metrics;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  padding: 8px;
+}
+.metric { display: flex; flex-direction: column; justify-content: center; align-items: center; min-width: 0; }
+.m-label { color: var(--text-muted); font-size: 1rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.m-value {
+  font-size: clamp(2.2rem, 7vh, 4.6rem);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---------- Guidance strip ---------- */
+#guidance {
+  grid-area: guide;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 12px 20px;
+}
+.guide-main { display: flex; align-items: baseline; gap: 24px; min-width: 0; }
+#guide-text { font-size: clamp(1.2rem, 3vh, 1.8rem); }
+#phase-timer { font-size: clamp(1.4rem, 3.5vh, 2.2rem); font-weight: 700; font-variant-numeric: tabular-nums; color: var(--accent); }
+#phase-actions { display: flex; gap: 10px; flex-shrink: 0; }
+
+/* ---------- Charts ---------- */
+#charts {
+  grid-area: charts;
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 14px;
+  min-height: 0;
+}
+.chart { display: flex; flex-direction: column; padding: 8px 12px 10px; min-height: 0; }
+.chart h3 { margin: 0 0 4px; font-size: 0.95rem; font-weight: 500; color: var(--text-muted); }
+.chart canvas { flex: 1; width: 100%; min-height: 0; }
+
+/* ---------- Alert banner ---------- */
+#alert-banner {
+  position: fixed;
+  /* Over the charts, so heart rate and rowing numbers stay visible while you ease off. */
+  left: 50%;
+  bottom: 120px;
+  transform: translateX(-50%);
+  padding: 18px 36px;
+  border-radius: 16px;
+  font-size: clamp(1.6rem, 5vh, 3rem);
+  font-weight: 800;
+  text-align: center;
+  z-index: 20;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+#alert-banner.over { background: var(--over); color: white; }
+#alert-banner.nosignal { background: #e4e4e7; color: #18181b; }
+
+/* ---------- Simulator panel ---------- */
+#sim-panel {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.75);
+  border: 1px dashed var(--accent);
+  border-radius: 12px;
+  font-size: 0.9rem;
+  z-index: 15;
+}
+#sim-panel[hidden] { display: none; }
+#sim-panel button { font-size: 0.85rem; padding: 0.35em 0.7em; }
+.sim-title { color: var(--accent); font-weight: 600; }
+
+/* ---------- Overlays & dialogs ---------- */
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5, 8, 12, 0.9);
+  z-index: 30;
+}
+.overlay[hidden] { display: none; }
+.overlay-card { text-align: center; max-width: 640px; padding: 32px; }
+.overlay-card h1 { font-size: 3rem; margin: 0 0 12px; }
+.overlay-card p { font-size: 1.2rem; color: var(--text-muted); }
+.overlay-buttons { display: flex; gap: 16px; justify-content: center; margin: 28px 0; flex-wrap: wrap; }
+.fine { font-size: 0.95rem !important; }
+.error { color: #fca5a5 !important; }
+
+dialog {
+  background: #151a21;
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  border-radius: 18px;
+  padding: 24px 28px;
+  max-width: min(720px, 94vw);
+  max-height: 92vh;
+}
+dialog::backdrop { background: rgba(0, 0, 0, 0.7); }
+dialog h2 { margin-top: 0; }
+.notice {
+  background: rgba(245, 158, 11, 0.12);
+  border-left: 4px solid var(--high);
+  padding: 10px 14px;
+  border-radius: 6px;
+  line-height: 1.4;
+}
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 20px; align-items: end; margin: 16px 0; }
+.form-grid label { display: flex; flex-direction: column; gap: 6px; color: var(--text-muted); }
+.form-grid label.check { flex-direction: row; align-items: center; color: var(--text); }
+.form-grid input[type='number'] {
+  font: inherit;
+  font-size: 1.3rem;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--panel-border);
+  background: #0b0f14;
+  color: var(--text);
+}
+.form-grid input[type='checkbox'] { width: 24px; height: 24px; }
+.dialog-buttons { display: flex; gap: 10px; align-items: center; margin-top: 8px; }
+.spacer { flex: 1; }
+
+.summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 12px 0 18px; }
+.summary-grid .metric { background: var(--panel); border-radius: 12px; padding: 10px; }
+.summary-grid .m-value { font-size: 2rem; }
+.zone-split { display: flex; height: 26px; border-radius: 8px; overflow: hidden; margin: 6px 0 4px; }
+.zone-split div { height: 100%; }
+.zone-legend { display: flex; gap: 16px; flex-wrap: wrap; color: var(--text-muted); font-size: 0.95rem; }
+.zone-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+
+/* ---------- Text inputs in settings ---------- */
+.form-grid input[type='text'] {
+  font: inherit;
+  font-size: 1.1rem;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--panel-border);
+  background: #0b0f14;
+  color: var(--text);
+}
+.fine-print { color: var(--text-muted); line-height: 1.4; }
+.fine-print code { color: var(--text); }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ---------- After-session feedback ---------- */
+#rpe-buttons { display: grid; grid-template-columns: repeat(10, 1fr); gap: 6px; margin-top: 8px; }
+#rpe-buttons button { padding: 0.6em 0; font-size: 1.2rem; font-weight: 600; }
+#rpe-buttons button.selected { background: var(--accent); color: #04121c; border-color: transparent; }
+.rpe-scale { display: flex; justify-content: space-between; color: var(--text-muted); font-size: 0.9rem; margin: 4px 2px 14px; }
+.symptom-check {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  line-height: 1.35;
+}
+.symptom-check input { width: 24px; height: 24px; flex-shrink: 0; margin: 0; }
+#coach-verdict {
+  font-size: 1.25rem;
+  line-height: 1.45;
+  padding: 12px 16px;
+  border-left: 4px solid var(--accent);
+  background: rgba(56, 189, 248, 0.08);
+  border-radius: 6px;
+}
+#coach-verdict.warn { border-left-color: var(--over); background: rgba(239, 68, 68, 0.12); }
+
+/* ---------- Progress screen ---------- */
+#progress-overlay { align-items: stretch; background: var(--bg); }
+.progress-wrap { width: 100%; height: 100%; display: flex; flex-direction: column; padding: 14px 18px 18px; gap: 12px; }
+.progress-head { display: flex; align-items: center; gap: 10px; }
+.progress-head h2 { margin: 0; font-size: 1.6rem; }
+#progress-tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+#progress-tiles .metric { background: var(--panel); border: 1px solid var(--panel-border); border-radius: 14px; padding: 8px; }
+#progress-tiles .m-value { font-size: clamp(1.6rem, 5vh, 2.6rem); }
+#progress-tiles small { font-size: 0.5em; color: var(--text-muted); font-weight: 500; }
+.m-sub { color: var(--text-muted); font-size: 0.9rem; }
+.progress-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 12px; }
+.chart h3 em { font-style: normal; opacity: 0.7; }
+#chart-tip {
+  position: fixed;
+  transform: translate(-50%, -100%);
+  background: #f5f7fa;
+  color: #0b0f14;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  pointer-events: none;
+  z-index: 40;
+  white-space: nowrap;
+}
+#chart-tip[hidden] { display: none; }
+
+/* ---------- Coach card (idle) ---------- */
+#guide-text.coach { font-size: clamp(1.3rem, 3.4vh, 2rem); font-weight: 600; }
+.guide-sub { color: var(--text-muted); font-size: 1.05rem; margin-top: 4px; }

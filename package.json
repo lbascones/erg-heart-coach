@@ -1,0 +1,22 @@
+{
+  "name": "erg-heart-coach",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Heart-rate-first rowing display for a Concept2 rower with a PM4 monitor",
+  "type": "module",
+  "scripts": {
+    "postinstall": "node scripts/copy-lib.js",
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "start": "node server.js",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ergometer-js": "^1.5.3"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
+  }
+}
