@@ -89,6 +89,7 @@ const el = {
   settingsForm: $<HTMLFormElement>('settings-form'),
   settingsError: $('settings-error'),
   notifyStatus: $('notify-status'),
+  cancelDialog: $<HTMLDialogElement>('cancel-dialog'),
   summaryDialog: $<HTMLDialogElement>('summary-dialog'),
   summaryBody: $('summary-body'),
   feedback: $('feedback'),
@@ -226,6 +227,9 @@ function renderPhaseActions(today: Today, hasHr: boolean) {
     case 'recovery':
       buttons.push(['Skip', () => session.finish()]);
       break;
+  }
+  if (session.phase !== 'idle' && session.phase !== 'done') {
+    buttons.push(['Cancel session', () => el.cancelDialog.showModal(), 'ghost']);
   }
   el.phaseActions.replaceChildren(
     ...buttons.map(([label, fn, cls, disabled]) => {
@@ -635,7 +639,8 @@ function showSummary(s: SessionSummary) {
     </div>`;
   selectedRpe = 0;
   el.rpeButtons.querySelectorAll('button').forEach((x) => x.classList.remove('selected'));
-  el.symptoms.checked = false;
+  el.symptoms.checked = reportUnwell;
+  reportUnwell = false;
   el.feedback.hidden = false;
   el.verdict.hidden = true;
   el.feedbackSave.hidden = false;
@@ -657,6 +662,34 @@ el.feedbackSave.addEventListener('click', () => {
   el.summaryClose.hidden = false;
   void scheduleNextReminder();
   void backupNow();
+});
+
+// ---------- Cancelling a session ----------
+/** Set when "I don't feel well" ends a session, so the summary arrives with the symptoms box ticked. */
+let reportUnwell = false;
+
+function refreshActions() {
+  renderedActionsKey = '';
+  update();
+}
+$('btn-cancel-keep').addEventListener('click', () => el.cancelDialog.close());
+// Discard: nothing is saved and the trainer is untouched (it only changes when feedback is saved).
+$('btn-cancel-discard').addEventListener('click', () => {
+  el.cancelDialog.close();
+  if (session.phase === 'idle' || session.phase === 'done') return;
+  reportUnwell = false;
+  session.reset();
+  curves.length = 0;
+  drawForceCurves(el.forceChart, curves);
+  refreshActions();
+});
+// Feeling unwell: end now, skip the cool-down, and go to the summary with symptoms pre-ticked.
+$('btn-cancel-unwell').addEventListener('click', () => {
+  el.cancelDialog.close();
+  if (session.phase === 'idle' || session.phase === 'done') return;
+  reportUnwell = true;
+  session.finish(); // rowing -> 60 s recovery check (sit still); recovery -> summary
+  refreshActions();
 });
 
 // The summary must be answered before closing; Escape would skip the questions.

@@ -25,6 +25,9 @@ npm run dev        # open http://localhost:5173
 - **No-signal alarm:** if no valid HR arrives for 5 s, it shows `--` and warns. It never shows a stale number.
   (ErgometerJS only refreshes HR when the stroke phase changes; we poll it every second so it keeps updating when you stop.)
 - Session flow: warm-up → workout → cool-down → 60 s recovery check → summary (time in zones, HR drop in 60 s).
+- **Cancel session** (any time during a session): **Discard** saves nothing and leaves the plan unchanged, so today's
+  session can still be done later. **I don't feel well** ends the session and opens the summary with symptoms ticked,
+  so the plan pauses until a doctor has checked you.
 - Pace, watts, stroke rate, distance, time and calories, plus a live force curve with the last few strokes for comparison.
 - Settings (birth date, max HR, target zone, ceiling, warm-up/cool-down length) and session history are kept in the browser.
   Age is worked out from the birth date. Limits filled in from the age estimate move to the new age's estimate on your
