@@ -199,7 +199,7 @@ Don't mount the laptop on the rower: it's too heavy for the monitor arm, would h
    [Desktop Entry]
    Type=Application
    Name=Erg Heart Coach
-   Exec=sh -c 'until curl -s -o /dev/null http://localhost:4173; do sleep 1; done; exec google-chrome --kiosk --no-first-run --noerrdialogs --disable-session-crashed-bubble --autoplay-policy=no-user-gesture-required http://localhost:4173'
+   Exec=sh -c 'until curl -s -o /dev/null http://localhost:4173; do sleep 1; done; exec google-chrome --kiosk --password-store=basic --no-first-run --noerrdialogs --disable-session-crashed-bubble --autoplay-policy=no-user-gesture-required http://localhost:4173'
    EOF
    ```
 7. **Keep the screen on.** Settings → Power Manager → Display: set blanking and sleep to **Never** when plugged in.
