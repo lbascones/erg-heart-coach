@@ -74,4 +74,7 @@ report() {
 
 echo
 echo "Saved to $REPORT"
+if rclone listremotes 2>/dev/null | grep -q '^gdrive:'; then
+  rclone copy "$REPORT" gdrive:rowing-backups/diagnostics && echo "Copied to Google Drive (rowing-backups/diagnostics)."
+fi
 [ "$MODE" != "check" ] && echo "Does the trackpad work now? Remember the answer for the report."
