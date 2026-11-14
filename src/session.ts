@@ -3,7 +3,8 @@ import type { Settings } from './settings';
 import type { RowerSample } from './sources/source';
 import type { SessionPlan, SessionType } from './trainer';
 
-export type Phase = 'idle' | 'warmup' | 'main' | 'cooldown' | 'recovery' | 'done';
+/** 'standby': Start was pressed, waiting for the first stroke (the laptop is out of reach from the seat). */
+export type Phase = 'idle' | 'standby' | 'warmup' | 'main' | 'cooldown' | 'recovery' | 'done';
 
 /** How long to sit still after finishing while we measure heart-rate recovery. */
 export const RECOVERY_SECONDS = 60;
@@ -113,13 +114,27 @@ export class Session {
     return null;
   }
 
-  start(plan: SessionPlan, now = Date.now()) {
+  /**
+   * Arms a session: it waits in standby and begins with the first stroke (or begin()).
+   * `last` is the monitor's latest reading, so the first stroke's meters are counted too.
+   */
+  start(plan: SessionPlan, last: { distance: number; calories: number } | null = null, now = Date.now()) {
     const settings = this.settings;
     Object.assign(this, new Session(settings));
     this.plan = plan;
     this.startedAt = now;
     this.lastTickAt = now;
-    this.setPhase(settings.warmupMinutes > 0 ? 'warmup' : 'main', now);
+    this.lastDistance = last?.distance ?? null;
+    this.lastCalories = last?.calories ?? null;
+    this.setPhase('standby', now);
+  }
+
+  /** Leaves standby: the session clock and warm-up start now. */
+  begin(now = Date.now()) {
+    if (this.phase !== 'standby') return;
+    this.startedAt = now;
+    this.lastTickAt = now;
+    this.setPhase(this.settings.warmupMinutes > 0 ? 'warmup' : 'main', now);
   }
 
   skipWarmup(now = Date.now()) {
@@ -148,6 +163,7 @@ export class Session {
   }
 
   onSample(s: RowerSample) {
+    if (this.phase === 'standby' && s.power > 0) this.begin(s.time);
     if (!this.rowingPhase) return;
     // The PM's counters reset when a new workout starts on it, so add up the increases ourselves.
     this.distance += delta(this.lastDistance, s.distance);
@@ -164,7 +180,7 @@ export class Session {
     this.lastTickAt = now;
     const hasHr = zone !== 'nosignal';
     if (hasHr) this.lastHr = hr;
-    if (this.phase === 'idle' || this.phase === 'done') return false;
+    if (this.phase === 'idle' || this.phase === 'standby' || this.phase === 'done') return false;
 
     if (this.rowingPhase) {
       this.zoneSeconds[zone] += dt;

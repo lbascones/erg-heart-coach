@@ -191,6 +191,7 @@ el.simPanel.addEventListener('click', (e) => {
 // ---------- Session controls ----------
 const PHASE_TITLE: Record<Phase, string> = {
   idle: 'Ready',
+  standby: 'Standing by',
   warmup: 'Warm-up',
   main: 'Workout',
   cooldown: 'Cool-down',
@@ -218,6 +219,9 @@ function renderPhaseActions(today: Today, hasHr: boolean) {
       } else if (today.kind === 'paused') {
         buttons.push(['My doctor has cleared me', resumeTrainer]);
       }
+      break;
+    case 'standby':
+      buttons.push(['Start now', () => session.begin()]);
       break;
     case 'warmup':
       buttons.push(['Skip warm-up', () => session.skipWarmup()]);
@@ -262,7 +266,7 @@ function startSession(plan: SessionPlan) {
   drawForceCurves(el.forceChart, curves);
   welcomeBack = null;
   birthdayNotice = null;
-  session.start(plan);
+  session.start(plan, lastSample);
 }
 
 function resumeTrainer() {
@@ -305,6 +309,13 @@ function guidance(zone: Zone, today: Today): [string, string] {
       default:
         return [today.text, waiting || birthdayNotice || welcomeBack || ''];
     }
+  }
+
+  if (session.phase === 'standby') {
+    return [
+      'Standing by. The session starts with your first stroke.',
+      zone === 'nosignal' ? 'No heart-rate signal at the moment: check the strap.' : '',
+    ];
   }
 
   if (zone === 'nosignal') return ['No heart rate! Check the strap. Row very gently until it comes back.', ''];
@@ -373,7 +384,8 @@ function update() {
   positionZoneMarker(zone === 'nosignal' ? null : tracker.bpm);
 
   // Alarms and banner
-  const active = session.phase !== 'idle' && session.phase !== 'done';
+  // Standby is not rowing yet: no signal-loss alarm while walking to the rower (the over-limit alarm always works).
+  const active = session.phase !== 'idle' && session.phase !== 'standby' && session.phase !== 'done';
   alarm.update(zone, active);
   if (zone === 'over') showBanner('over', `HEART RATE ${tracker.bpm}: EASE OFF`);
   else if (zone === 'nosignal' && active) showBanner('nosignal', 'NO HEART RATE SIGNAL');
@@ -405,7 +417,8 @@ function update() {
   el.guideSub.textContent = sub;
   el.guideSub.hidden = !sub;
   const clock = session.phaseClock(now);
-  el.phaseTimer.textContent = session.phase === 'idle' || session.phase === 'done' ? '' : fmtTime(clock.seconds);
+  el.phaseTimer.textContent =
+    session.phase === 'idle' || session.phase === 'standby' || session.phase === 'done' ? '' : fmtTime(clock.seconds);
 
   if (source instanceof SimulatorSource) {
     el.simEffort.textContent = `effort ${Math.round(source.effort * 100)}%${source.rowing ? '' : ' (stopped)'}${source.hrSignal ? '' : ' (HR off)'}`;
