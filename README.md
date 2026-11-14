@@ -217,11 +217,12 @@ When the code on GitHub changes (for example after a fix), bring the laptop up t
 1. Exit kiosk mode with **Alt+F4**, then open a terminal (Ctrl+Alt+T).
 2. Download, build and restart:
    ```sh
-   cd ~/erg-heart-coach && git pull && npm install && npm run build && systemctl --user restart rowing
+   bash ~/erg-heart-coach/scripts/update.sh
    ```
+   (It runs `git pull`, `npm install`, `npm run build` and `systemctl --user restart rowing`.)
    If the `rowing` service isn't set up yet (step 5 of the setup), start the server by hand instead:
    `node server.js` in a terminal that stays open.
-3. Restart the laptop (or open http://localhost:4173 in Chrome). The new version loads.
+3. Press F5 in Chrome or restart the laptop. The new version loads.
 
 `git pull` only fetches; your sessions, settings and backups are stored elsewhere and are never touched.
 If `git pull` asks for a login, the repo has been made private again: see step 2 of the setup.
@@ -267,6 +268,8 @@ saved is lost.
    `systemctl --user daemon-reload && systemctl --user restart rowing`.
    To check it, save Settings once, then `journalctl --user -u rowing -n 5` should say
    `after-backup command finished`.
+   If your service file has that line **without** the quotes (an earlier version of this README),
+   `bash ~/erg-heart-coach/scripts/fix-drive-copy.sh` fixes it, copies what's missing, and checks the automatic copy.
 5. From then on, new backups and diagnostics files are copied after every save. If the internet
    is down at that moment, the next session's copy catches up (rclone copies everything that's missing).
    It uses `copy`, not `sync`, so deleting files on the laptop never deletes them from Drive.
