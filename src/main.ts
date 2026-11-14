@@ -384,12 +384,17 @@ function update() {
   el.pace.textContent = fresh ? fmtPace(fresh.pace) : '--';
   el.power.textContent = fresh?.power ? String(fresh.power) : '--';
   el.spm.textContent = fresh?.spm ? String(fresh.spm) : '--';
-  el.distance.textContent = session.phase === 'idle' ? '--' : `${Math.round(session.distance)} m`;
-  el.time.textContent =
-    session.phase === 'idle'
-      ? '--'
-      : fmtTime(((session.rowingPhase ? now : session.phaseStartedAt) - session.startedAt) / 1000);
-  el.cal.textContent = session.phase === 'idle' ? '--' : String(Math.round(session.calories));
+  if (session.phase === 'idle') {
+    // No session yet: show the monitor's own totals (as on its display), kept for 2 minutes after the last stroke.
+    const recent = lastSample && now - lastSample.time < 120_000 ? lastSample : null;
+    el.distance.textContent = recent ? `${Math.round(recent.distance)} m` : '--';
+    el.time.textContent = recent ? fmtTime(recent.elapsed) : '--';
+    el.cal.textContent = recent ? String(Math.round(recent.calories)) : '--';
+  } else {
+    el.distance.textContent = `${Math.round(session.distance)} m`;
+    el.time.textContent = fmtTime(((session.rowingPhase ? now : session.phaseStartedAt) - session.startedAt) / 1000);
+    el.cal.textContent = String(Math.round(session.calories));
+  }
 
   // Guidance strip and coach
   const today = planToday(trainer, settings, now);
