@@ -348,13 +348,14 @@ function guidance(zone: Zone, today: Today): [string, string] {
       return ['Ease back into your target.', `Back under ${s.targetHigh} bpm.`];
     }
     case 'cooldown': {
+      const aim = session.cooldownWatts ? `about ${session.cooldownWatts} W, 18–20 strokes/min` : '18–20 strokes/min, light pressure';
       if (session.dropSecondsLeft() !== null) {
-        return ['Workout done! Keep rowing easily.', 'Measuring how far your heart rate drops in the first minute.'];
+        return ['Workout done! Keep rowing easily.', `Steady at ${aim}: measuring your heart-rate drop.`];
       }
       const drop = session.hrDropTo ? session.hrDropFrom - session.hrDropTo : null;
       return [
-        'Cool down: easy strokes.',
-        drop !== null ? `Heart rate dropped ${drop} bpm in the first minute.` : 'Let your heart rate come down.',
+        drop !== null ? `Heart rate dropped ${drop} bpm in the first minute.` : 'Cool down: easy strokes.',
+        `Keep it easy, ${aim}, and let your heart rate keep falling.`,
       ];
     }
     default:
@@ -399,16 +400,13 @@ function renderCoach(now: number) {
     case 'cooldown': {
       stage = 'Cool-down';
       const measuring = session.dropSecondsLeft(now);
-      if (measuring !== null) {
-        clocks.push(['Measuring HR drop', measuring, true]);
-        clocks.push(['End of workout', `${session.hrDropFrom}`]);
-        if (tracker.hasSignal()) {
-          const drop = session.hrDropFrom - tracker.bpm;
-          clocks.push(['Drop so far', drop >= 0 ? `${drop}` : `up ${-drop}`]);
-        }
-      } else {
-        clocks.push(['Cool-down left', clock.seconds, true]);
-        if (session.hrDropTo) clocks.push(['HR drop, 1st minute', `${session.hrDropFrom - session.hrDropTo}`]);
+      clocks.push(measuring !== null ? ['Measuring', measuring, true] : ['Cool-down left', clock.seconds, true]);
+      if (session.cooldownWatts) clocks.push(['Aim for', `${session.cooldownWatts} W`]);
+      if (measuring !== null && tracker.hasSignal()) {
+        const drop = session.hrDropFrom - tracker.bpm;
+        clocks.push([`Drop from ${session.hrDropFrom}`, drop >= 0 ? `${drop}` : `up ${-drop}`]);
+      } else if (session.hrDropTo) {
+        clocks.push(['HR drop, 1st min', `${session.hrDropFrom - session.hrDropTo}`]);
       }
       break;
     }

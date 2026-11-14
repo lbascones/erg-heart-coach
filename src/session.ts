@@ -83,6 +83,9 @@ export class Session {
   mainSec = 0;
   private hr = new Averager();
   private power = new Averager();
+  private mainPower = new Averager();
+  /** Suggested cool-down effort: about half the workout's average watts (0 = no suggestion). */
+  cooldownWatts = 0;
   private targetPower = new Averager();
   private checkPower = new Averager();
   private lastPower = 0;
@@ -193,7 +196,11 @@ export class Session {
 
   private setPhase(p: Phase, now: number) {
     // The drop is measured from the last fresh reading of the workout.
-    if (p === 'cooldown') this.hrDropFrom = now - this.lastHrAt <= 5000 ? this.lastHr : 0;
+    if (p === 'cooldown') {
+      this.hrDropFrom = now - this.lastHrAt <= 5000 ? this.lastHr : 0;
+      // Rounded to 5 W so it is an easy number to hold; never below 20 W.
+      this.cooldownWatts = this.mainPower.n ? Math.max(20, Math.round(this.mainPower.value / 2 / 5) * 5) : 0;
+    }
     this.phase = p;
     this.phaseStartedAt = now;
   }
@@ -208,6 +215,7 @@ export class Session {
     this.lastCalories = s.calories;
     this.lastPower = s.power;
     if (s.power > 0) this.power.add(s.power);
+    if (s.power > 0 && this.phase === 'main') this.mainPower.add(s.power);
   }
 
   /** Call about once a second. Returns true when the phase changed by itself (timer ran out) or an interval piece changed. */

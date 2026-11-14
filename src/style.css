@@ -209,7 +209,8 @@ button.huge { font-size: 2rem; padding: 0.6em 1.6em; border-radius: 16px; }
 #guide-text.coach { font-size: clamp(1.6rem, 4.6vh, 3rem); }
 .guide-sub { color: var(--text-muted); font-size: clamp(1.2rem, 3.4vh, 2.2rem); }
 .coach-foot { margin-top: auto; display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; }
-#coach-clocks { display: flex; gap: 40px; }
+#coach-clocks { display: flex; gap: 36px; min-width: 0; }
+.clock { white-space: nowrap; }
 .clock .m-label { font-size: 0.95rem; }
 .clock-value {
   font-size: clamp(2.2rem, 7.5vh, 5rem);
