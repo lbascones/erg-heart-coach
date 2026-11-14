@@ -65,14 +65,27 @@ function send(res, status, body, type = 'application/json') {
 }
 
 let afterBackupRunning = false;
+/** A file was written while a copy was running: copy once more when it finishes. */
+let afterBackupAgain = false;
 function runAfterBackup() {
   const cmd = process.env.ROWING_AFTER_BACKUP;
-  if (!cmd || afterBackupRunning) return;
+  if (!cmd) return;
+  if (afterBackupRunning) {
+    afterBackupAgain = true;
+    return;
+  }
   afterBackupRunning = true;
-  exec(cmd, { timeout: 5 * 60_000 }, (err, _stdout, stderr) => {
+  console.log(`[backup] running after-backup command: ${cmd}`);
+  // A systemd service gets a short PATH; add the usual places rclone gets installed.
+  const env = { ...process.env, PATH: `${process.env.PATH || '/usr/bin:/bin'}:/usr/local/bin:/snap/bin` };
+  exec(cmd, { timeout: 5 * 60_000, env }, (err, _stdout, stderr) => {
     afterBackupRunning = false;
-    if (err) console.error('[backup] after-backup command failed:', stderr || err.message);
+    if (err) console.error('[backup] after-backup command failed:', err.code ?? '', stderr || err.message);
     else console.log('[backup] after-backup command finished');
+    if (afterBackupAgain) {
+      afterBackupAgain = false;
+      runAfterBackup();
+    }
   });
 }
 
