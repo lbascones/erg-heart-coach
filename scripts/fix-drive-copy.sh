@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Fixes and checks the automatic Google Drive copy on the laptop.
 #
-# The README's service file used to have the ROWING_AFTER_BACKUP line without quotes, so systemd cut the
-# command at the first space and the copy to Drive never ran. This script adds the quotes, restarts the
-# service, copies everything that is missing to Drive right away, and then checks the automatic copy.
+# Turns on the automatic copy: writes the ROWING_AFTER_BACKUP line into the service file (replacing a line
+# that is still commented out with #, or an old one without quotes, which systemd cuts at the first space),
+# restarts the service, copies everything that is missing to Drive right away, then checks the automatic copy.
 #
 # Run it on the laptop:
 #   cd ~/erg-heart-coach && git pull && bash scripts/fix-drive-copy.sh
@@ -22,15 +22,20 @@ if [ ! -f "$SERVICE" ]; then
   echo "   $SERVICE not found. Do step 5 of 'Setting up the laptop' in the README first."
   exit 1
 fi
-if grep -q '^Environment=ROWING_AFTER_BACKUP=' "$SERVICE"; then
-  cp "$SERVICE" "$SERVICE.bak"
-  sed -i 's|^Environment=ROWING_AFTER_BACKUP=\(.*\)$|Environment="ROWING_AFTER_BACKUP=\1"|' "$SERVICE"
-  echo "   Added the missing quotes (the old file is kept as rowing.service.bak)."
-elif grep -q '^Environment="ROWING_AFTER_BACKUP=' "$SERVICE"; then
-  echo "   Already has the quotes."
-else
-  echo "   There is no active ROWING_AFTER_BACKUP line. If it starts with #, remove the # and run this again."
+REMOTE=$(rclone listremotes 2>/dev/null | grep -m1 '^gdrive:' || rclone listremotes 2>/dev/null | head -n1)
+if [ -z "$REMOTE" ]; then
+  echo "   rclone has no Google Drive remote yet. Do 'Google Drive backups (rclone)' in the README first."
   exit 1
+fi
+LINE="Environment=\"ROWING_AFTER_BACKUP=rclone copy %h/rowing-backups ${REMOTE}rowing-backups\""
+if grep -qxF "$LINE" "$SERVICE"; then
+  echo "   Already set correctly."
+else
+  # Replace any old version of the line (commented out with #, or without quotes) with the right one.
+  cp "$SERVICE" "$SERVICE.bak"
+  sed -i '/ROWING_AFTER_BACKUP=/d' "$SERVICE"
+  sed -i "/^ExecStart=/a $LINE" "$SERVICE"
+  echo "   Turned on the Drive copy (the old file is kept as rowing.service.bak)."
 fi
 grep ROWING_AFTER_BACKUP "$SERVICE"
 
