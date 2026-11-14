@@ -235,8 +235,8 @@ When something doesn't work with the monitor (no data, dropouts, odd numbers), r
    connection sequence. To capture start-up too, open the app as http://localhost:4173/?diag.
 3. Tap **● Recording → Stop and save**. The file is written to
    `~/rowing-backups/diagnostics/diag-YYYY-MM-DD-HHMMSS.json` and copied to Google Drive
-   (`rowing-backups/diagnostics`) right away, if rclone is set up. Without rclone, copy it off with a
-   USB stick.
+   (`rowing-backups/diagnostics`) right away, if rclone is set up. If the server can't take it (for example
+   it wasn't restarted after an update), the message says why and Chrome saves the file to `~/Downloads` instead.
 
 The file holds the monitor's raw USB traffic, connection and stroke events, the heart rate and rowing data the app
 received, error messages, the USB device details (model, report sizes) and the app version. It doesn't hold your

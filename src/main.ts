@@ -810,11 +810,12 @@ el.diagToggle.addEventListener('click', async () => {
   diagMessage = 'Saving…';
   renderDiag();
   el.diagToggle.disabled = true;
-  const file = await saveDiagnostics(data);
+  const saved = await saveDiagnostics(data);
   el.diagToggle.disabled = false;
-  diagMessage = file
-    ? `Saved as ${file} in ~/rowing-backups/diagnostics. It goes to Google Drive (rowing-backups/diagnostics) if rclone is set up.`
-    : 'No app server here, so the file was downloaded to this browser’s Downloads folder instead.';
+  diagMessage =
+    'file' in saved
+      ? `Saved as ${saved.file} in ~/rowing-backups/diagnostics. It goes to Google Drive (rowing-backups/diagnostics) if rclone is set up.`
+      : `Not saved to the backups folder: ${saved.reason}. The file was downloaded to ~/Downloads as ${saved.downloaded} instead.`;
   renderDiag();
 });
 $('btn-diag-close').addEventListener('click', () => el.diagDialog.close());

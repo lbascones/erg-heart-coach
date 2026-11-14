@@ -172,25 +172,31 @@ function safeJson(v: unknown): string {
 }
 
 /**
- * Sends a finished recording to the laptop's server. Returns the saved file name, or null if there is
- * no server (then the file is downloaded by the browser instead).
+ * Sends a finished recording to the laptop's server. If that fails, the browser downloads the file
+ * instead (to ~/Downloads), so the recording is never lost.
  */
-export async function saveDiagnostics(data: object): Promise<string | null> {
+export async function saveDiagnostics(data: object): Promise<{ file: string } | { downloaded: string; reason: string }> {
   const body = JSON.stringify(data);
+  let reason: string;
   try {
     const res = await fetch('/api/diagnostics', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body,
     });
-    if (!res.ok) throw new Error(`server replied ${res.status}`);
-    return (await res.json()).file as string;
-  } catch {
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([body], { type: 'application/json' }));
-    a.download = `diag-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-    return null;
+    if (res.ok) return { file: (await res.json()).file as string };
+    reason =
+      res.status === 404 || res.status === 405
+        ? 'the app server is an older version (restart it after updating)'
+        : `the app server replied ${res.status} ${await res.text().catch(() => '')}`.trim();
+  } catch (err) {
+    reason = `the app server could not be reached (${String(err)})`;
   }
+  const name = `diag-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([body], { type: 'application/json' }));
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  return { downloaded: name, reason };
 }
