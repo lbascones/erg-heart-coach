@@ -46,21 +46,20 @@
         <div class="metric"><div class="m-label">Calories</div><div class="m-value" id="m-cal">--</div></div>
       </section>
 
-      <section id="guidance" class="panel">
-        <div class="guide-main">
-          <div>
-            <div id="guide-text">Put on your heart-rate strap, then press Start.</div>
-            <div id="guide-sub" class="guide-sub" hidden></div>
-          </div>
-          <div id="phase-timer"></div>
+      <section id="coach" class="panel">
+        <div class="coach-head">
+          <div id="coach-stage"></div>
+          <div id="coach-pips"></div>
         </div>
-        <div id="phase-actions"></div>
+        <div id="guide-text">Put on your heart-rate strap, then press Start.</div>
+        <div id="guide-sub" class="guide-sub" hidden></div>
+        <div class="coach-foot">
+          <div id="coach-clocks"></div>
+          <div id="phase-actions"></div>
+        </div>
       </section>
 
-      <section id="charts">
-        <div class="panel chart"><h3>Heart rate, last 10 minutes</h3><canvas id="hr-chart"></canvas></div>
-        <div class="panel chart"><h3>Force curve</h3><canvas id="force-chart"></canvas></div>
-      </section>
+      <section id="force-panel" class="panel chart"><h3>Force curve</h3><canvas id="force-chart"></canvas></section>
     </main>
 
     <div id="alert-banner" hidden></div>
@@ -142,6 +141,10 @@
     <dialog id="summary-dialog">
       <h2>Session complete</h2>
       <div id="summary-body"></div>
+      <div class="summary-chart">
+        <div class="m-label">Heart rate, whole session</div>
+        <canvas id="summary-hr-chart"></canvas>
+      </div>
       <div id="feedback">
         <div class="m-label">How hard did that feel?</div>
         <div id="rpe-buttons"></div>

@@ -8,7 +8,7 @@ import {
   sessionCount,
 } from './backup';
 import { diag, saveDiagnostics } from './diagnostics';
-import { drawForceCurves, drawHrChart, type HrPoint } from './charts';
+import { drawForceCurves, drawSessionHr } from './charts';
 import { HeartRateTracker, ZONE_LABEL, type Zone } from './heartrate';
 import { remindersEnabled, scheduleReminder, sendTestNotification } from './notify';
 import { attachTooltips, renderProgress } from './progress';
@@ -55,7 +55,6 @@ let welcomeBack = applyLayoff(trainer, Date.now());
 let birthdayNotice: string | null = null;
 let source: RowerSource | null = null;
 let lastSample: RowerSample | null = null;
-const hrPoints: HrPoint[] = [];
 const curves: number[][] = [];
 const MAX_CURVES = 6;
 
@@ -78,9 +77,12 @@ const el = {
   cal: $('m-cal'),
   guideText: $('guide-text'),
   guideSub: $('guide-sub'),
-  phaseTimer: $('phase-timer'),
   phaseActions: $('phase-actions'),
-  hrChart: $<HTMLCanvasElement>('hr-chart'),
+  coach: $('coach'),
+  coachStage: $('coach-stage'),
+  coachPips: $('coach-pips'),
+  coachClocks: $('coach-clocks'),
+  summaryHrChart: $<HTMLCanvasElement>('summary-hr-chart'),
   forceChart: $<HTMLCanvasElement>('force-chart'),
   banner: $('alert-banner'),
   connectOverlay: $('connect-overlay'),
@@ -134,9 +136,6 @@ async function useSource(src: RowerSource, interactive: boolean) {
   });
   src.on('heartRate', (bpm, t) => {
     tracker.report(bpm, t);
-    hrPoints.push({ t, hr: bpm });
-    const cutoff = t - 15 * 60_000;
-    while (hrPoints.length && hrPoints[0].t < cutoff) hrPoints.shift();
   });
   src.on('forceCurve', (c) => {
     curves.push(c);
@@ -323,48 +322,121 @@ function guidance(zone: Zone, today: Today): [string, string] {
       : ['Heart rate OK. Start rowing when you are ready.', 'The session starts with your first stroke.'];
   }
 
-  if (zone === 'nosignal') return ['No heart rate! Check the strap. Row very gently until it comes back.', ''];
+  if (zone === 'nosignal') return ['No heart rate! Check the strap.', 'Row very gently until it comes back.'];
 
   switch (session.phase) {
     case 'warmup':
       return zone === 'easy'
-        ? [`Warm up gently. Stay below ${s.targetLow} bpm.`, '']
-        : [`Warming up: ease off a little, stay below ${s.targetLow} bpm for now.`, ''];
-    case 'main':
+        ? ['Warm up gently.', `Easy strokes. Stay below ${s.targetLow} bpm for now.`]
+        : ['Ease off a little: still warming up.', `Stay below ${s.targetLow} bpm until the workout starts.`];
+    case 'main': {
       const piece = session.intervalState();
+      if (piece?.hard) {
+        if (zone === 'target') return ["You're in the hard-piece zone. Hold it!", `Stay under ${s.ceiling}.`];
+        return ['Push harder!', `Get up to ${s.targetHigh}–${s.ceiling} bpm.`];
+      }
       if (piece) {
-        const left = fmtTime(piece.secondsLeft);
-        if (piece.hard) {
-          const sub = `Hard piece ${piece.rep} of ${piece.reps}: ${left} left`;
-          if (zone === 'easy' || zone === 'high')
-            return [`Pick up the pace: aim for ${s.targetHigh}–${s.ceiling} bpm.`, sub];
-          return [`Good, hold this. Stay under ${s.ceiling}.`, sub];
-        }
-        const sub =
-          piece.rep < piece.reps ? `Next hard piece (${piece.rep + 1} of ${piece.reps}) in ${left}` : `Last easy stretch: ${left}`;
-        return ['Easy now: row gently and let your heart rate come down.', sub];
+        return [
+          'Easy now. Let your heart rate come down.',
+          piece.last ? 'That was the last hard piece. Well done.' : 'Gentle strokes. Get ready for the next piece.',
+        ];
       }
       if (session.plan.type === 'check') {
         const hr = session.plan.testHr!;
-        if (zone === 'easy') return [`Fitness check: gently build up to ${hr} bpm.`, 'Steady and smooth, no sprints.'];
+        if (zone === 'easy') return [`Build up gently to ${hr} bpm.`, 'Steady and smooth, no sprints.'];
         if (zone === 'target') return [`Hold it right here: ${hr} bpm.`, 'The last 5 minutes are scored.'];
         return [`Ease off slightly: aim for ${hr} bpm.`, ''];
       }
-      if (zone === 'easy') return [`Gently pick up the pace to reach ${range} bpm.`, ''];
-      if (zone === 'target') return ['Good! Hold this effort.', ''];
-      return [`Ease off a little: back under ${s.targetHigh} bpm.`, ''];
+      if (zone === 'easy') return ['Push a little harder to reach your target.', `Target: ${range} bpm.`];
+      if (zone === 'target') return ["You're in the zone. Hold this effort.", `Target: ${range} bpm.`];
+      return ['Ease back into your target.', `Back under ${s.targetHigh} bpm.`];
+    }
     case 'cooldown':
-      return ['Cool down: easy strokes, let your heart rate come down.', ''];
+      return ['Cool down.', 'Easy strokes. Let your heart rate come down.'];
     case 'recovery':
-      return ['Stop rowing and sit still. Measuring heart-rate recovery…', ''];
+      return ['Session complete! Stop rowing.', 'Sit still: measuring how far your heart rate drops in 1 minute.'];
     default:
       return ['', ''];
   }
 }
 
+/** The big coach panel: what stage you are in, interval progress, and the clocks that matter right now. */
+function renderCoach(now: number) {
+  const phase = session.phase;
+  const piece = session.intervalState(now);
+  const clock = session.phaseClock(now);
+  const inPhase = (now - session.phaseStartedAt) / 1000;
+  let stage = '';
+  const clocks: [label: string, value: number | string, main?: boolean][] = [];
+
+  switch (phase) {
+    case 'standby':
+      stage = 'Standing by';
+      break;
+    case 'warmup':
+      stage = 'Warm-up';
+      clocks.push(['Warm-up left', clock.seconds, true]);
+      break;
+    case 'main':
+      if (piece) {
+        stage = piece.hard ? `Hard piece ${piece.rep} of ${piece.reps}` : `Easy · after piece ${piece.rep} of ${piece.reps}`;
+        clocks.push([piece.hard ? 'In this piece' : 'Easy so far', piece.secondsIn]);
+        clocks.push([piece.hard ? 'Easy in' : piece.last ? 'Cool-down in' : 'Next hard piece in', piece.secondsLeft, true]);
+        clocks.push(['Workout left', clock.seconds]);
+      } else if (session.plan.type === 'check') {
+        stage = 'Fitness check';
+        clocks.push(['Workout so far', inPhase], ['Workout left', clock.seconds, true]);
+      } else if (clock.countdown) {
+        stage = 'Steady in your zone';
+        clocks.push(['Workout so far', inPhase], ['Workout left', clock.seconds, true]);
+      } else {
+        stage = 'Free row';
+        clocks.push(['Rowing for', inPhase, true]);
+      }
+      break;
+    case 'cooldown':
+      stage = 'Cool-down';
+      clocks.push(['Cool-down left', clock.seconds, true]);
+      break;
+    case 'recovery':
+      stage = 'Heart-rate drop';
+      clocks.push(['Measuring', clock.seconds, true]);
+      if (session.hrAtStop) {
+        clocks.push(['When you stopped', `${session.hrAtStop}`]);
+        if (tracker.hasSignal()) {
+          const drop = session.hrAtStop - tracker.bpm;
+          clocks.push(['Drop so far', drop >= 0 ? `${drop}` : `up ${-drop}`]);
+        }
+      }
+      break;
+  }
+
+  el.coachStage.textContent = stage;
+  el.coachStage.hidden = !stage;
+  el.coach.classList.toggle('hard', !!piece?.hard);
+  el.coach.classList.toggle('easy-piece', !!piece && !piece.hard);
+
+  const pips = piece
+    ? Array.from({ length: piece.reps }, (_, i) => {
+        const n = i + 1;
+        if (n < piece.rep || (n === piece.rep && !piece.hard)) return '<span class="done"></span>';
+        return n === piece.rep ? '<span class="now"></span>' : '<span></span>';
+      }).join('')
+    : '';
+  if (el.coachPips.innerHTML !== pips) el.coachPips.innerHTML = pips;
+
+  const html = clocks
+    .map(
+      ([label, v, main]) =>
+        `<div class="clock${main ? ' main' : ''}"><div class="m-label">${label}</div>` +
+        `<div class="clock-value">${typeof v === 'number' ? fmtTime(v) : v}</div></div>`,
+    )
+    .join('');
+  if (el.coachClocks.innerHTML !== html) el.coachClocks.innerHTML = html;
+}
+
 // ---------- Main update loop ----------
 let lastSessionTick = 0;
-let lastChartDraw = 0;
 let lastLayoffCheck = Date.now();
 
 let loggedPhase = '';
@@ -444,18 +516,12 @@ function update() {
   el.guideText.classList.toggle('coach', session.phase === 'idle');
   el.guideSub.textContent = sub;
   el.guideSub.hidden = !sub;
-  const clock = session.phaseClock(now);
-  el.phaseTimer.textContent =
-    session.phase === 'idle' || session.phase === 'standby' || session.phase === 'done' ? '' : fmtTime(clock.seconds);
+  renderCoach(now);
 
   if (source instanceof SimulatorSource) {
     el.simEffort.textContent = `effort ${Math.round(source.effort * 100)}%${source.rowing ? '' : ' (stopped)'}${source.hrSignal ? '' : ' (HR off)'}`;
   }
 
-  if (now - lastChartDraw >= 1000) {
-    lastChartDraw = now;
-    drawHrChart(el.hrChart, hrPoints, settings, now);
-  }
 }
 
 function showBanner(kind: 'over' | 'nosignal' | 'waiting', text: string) {
@@ -560,7 +626,6 @@ function applySettings(next: Settings) {
   session.setSettings(settings);
   alarm.enabled = settings.sound;
   layoutZoneBar();
-  drawHrChart(el.hrChart, hrPoints, settings, Date.now());
   void scheduleNextReminder();
   void backupNow();
 }
@@ -715,6 +780,9 @@ function showSummary(s: SessionSummary) {
   el.feedbackSave.disabled = true;
   el.summaryClose.hidden = true;
   el.summaryDialog.showModal();
+  const has = s.hrTrace.some((v) => v > 0);
+  el.summaryHrChart.parentElement!.hidden = !has;
+  if (has) drawSessionHr(el.summaryHrChart, s.hrTrace, s.settingsUsed);
 }
 
 el.feedbackSave.addEventListener('click', () => {
@@ -831,7 +899,6 @@ $('btn-fullscreen').addEventListener('click', () => {
   else void document.documentElement.requestFullscreen();
 });
 window.addEventListener('resize', () => {
-  drawHrChart(el.hrChart, hrPoints, settings, Date.now());
   drawForceCurves(el.forceChart, curves);
   if (!el.progressOverlay.hidden) renderProgress(progressEls, trainer);
 });

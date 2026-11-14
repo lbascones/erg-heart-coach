@@ -24,7 +24,11 @@ npm run dev        # open http://localhost:5173
 - **Over-limit alarm:** flashing red, banner and repeating beeps until HR is 3 bpm below the ceiling.
 - **No-signal alarm:** if no valid HR arrives for 5 s, it shows `--` and warns. It never shows a stale number.
   (ErgometerJS only refreshes HR when the stroke phase changes; we poll it every second so it keeps updating when you stop.)
-- Session flow: standby → warm-up → workout → cool-down → 60 s recovery check → summary (time in zones, HR drop in 60 s).
+- **Coach panel** (bottom left, beside the force curve): the stage (warm-up, hard piece 2 of 4, cool-down…), a large
+  instruction (push harder, you're in the zone, ease back…), and the clocks that matter now (time in this piece,
+  time to the next one, workout left; in the recovery check, HR when you stopped and the drop so far).
+- Session flow: standby → warm-up → workout → cool-down → 60 s recovery check → summary (time in zones, HR drop in 60 s,
+  heart-rate graph of the whole session). Stop rowing when the cool-down ends: the recovery check needs you sitting still.
   **Standby:** press Start at the laptop (no heart rate needed: the strap may be out of the receiver's range there),
   then get on the rower. A blue "Waiting for heart-rate signal" banner shows until the strap is picked up; the session
   begins with your first stroke. The no-signal alarm stays quiet until you row; **Start now** starts the clock without rowing.
@@ -81,7 +85,7 @@ Reminder text is generic (no name or health data), but it does pass through the 
 | `src/backup.ts` | Export, import, automatic backup and restore |
 | `src/diagnostics.ts` | Diagnostics recorder (raw USB traffic, events, errors) |
 | `server.js`, `server/backup.js` | Laptop server: serves the app, writes backups and diagnostics, runs the Drive sync |
-| `src/charts.ts` | HR trend and force curve drawing |
+| `src/charts.ts` | Session heart-rate graph (wrap-up) and force curve drawing |
 | `src/main.ts` | Wires everything to the screen |
 
 ## The laptop (Acer Aspire V5-572P)

@@ -23,8 +23,20 @@ export interface HrPoint {
   hr: number;
 }
 
-/** Heart rate over the last `windowMin` minutes, drawn over the target zone and ceiling bands. */
-export function drawHrChart(canvas: HTMLCanvasElement, points: HrPoint[], s: Settings, now: number, windowMin = 10) {
+type Limits = Pick<Settings, 'targetLow' | 'targetHigh' | 'ceiling'>;
+
+/**
+ * Heart rate over the `windowMin` minutes up to `now`, drawn over the target zone and ceiling bands.
+ * Time labels count back from now ("-4m"), or, with `fromStart`, up from the start ("4m").
+ */
+export function drawHrChart(
+  canvas: HTMLCanvasElement,
+  points: HrPoint[],
+  s: Limits,
+  now: number,
+  windowMin = 10,
+  fromStart = false,
+) {
   const { ctx, w, h } = prepare(canvas);
   const padL = 44;
   const padR = 8;
@@ -71,8 +83,13 @@ export function drawHrChart(canvas: HTMLCanvasElement, points: HrPoint[], s: Set
   ctx.fillStyle = css('--text-muted');
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
-  for (let m = 0; m <= windowMin; m += 2) {
-    ctx.fillText(m === windowMin ? 'now' : `-${windowMin - m}m`, x(t0 + m * 60_000), h - padB + 6);
+  if (fromStart) {
+    const step = windowMin <= 12 ? 2 : windowMin <= 30 ? 5 : 10;
+    for (let m = 0; m <= windowMin; m += step) ctx.fillText(`${m}m`, x(t0 + m * 60_000), h - padB + 6);
+  } else {
+    for (let m = 0; m <= windowMin; m += 2) {
+      ctx.fillText(m === windowMin ? 'now' : `-${windowMin - m}m`, x(t0 + m * 60_000), h - padB + 6);
+    }
   }
 
   // The HR line; gaps where there was no signal.
@@ -123,4 +140,11 @@ export function drawForceCurves(canvas: HTMLCanvasElement, curves: number[][]) {
     ctx.stroke();
   });
   ctx.globalAlpha = 1;
+}
+
+/** A whole session's heart rate (one reading every `stepSec` seconds), for the wrap-up. */
+export function drawSessionHr(canvas: HTMLCanvasElement, trace: number[], s: Limits, stepSec = 5) {
+  const points = trace.map((hr, i) => ({ t: i * stepSec * 1000, hr }));
+  const end = Math.max(1, trace.length - 1) * stepSec * 1000;
+  drawHrChart(canvas, points, s, end, end / 60_000, true);
 }

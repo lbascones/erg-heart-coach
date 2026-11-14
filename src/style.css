@@ -91,12 +91,12 @@ button.huge { font-size: 2rem; padding: 0.6em 1.6em; border-radius: 16px; }
   padding: 0 16px 16px;
   display: grid;
   gap: 14px;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
-  grid-template-rows: minmax(0, 1.25fr) auto minmax(0, 1fr);
+  /* Top: heart rate | rowing numbers. Bottom: coach (wide) | force curve. */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.6fr) minmax(0, 0.65fr);
+  grid-template-rows: minmax(0, 1.1fr) minmax(0, 1fr);
   grid-template-areas:
-    'hr metrics'
-    'guide guide'
-    'charts charts';
+    'hr metrics metrics'
+    'coach coach force';
 }
 
 .panel {
@@ -179,31 +179,56 @@ button.huge { font-size: 2rem; padding: 0.6em 1.6em; border-radius: 16px; }
   white-space: nowrap;
 }
 
-/* ---------- Guidance strip ---------- */
-#guidance {
-  grid-area: guide;
+/* ---------- Coach panel ---------- */
+#coach {
+  grid-area: coach;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 12px 20px;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 24px;
+  min-height: 0;
+  border: 3px solid transparent;
 }
-.guide-main { display: flex; align-items: baseline; gap: 24px; min-width: 0; }
-#guide-text { font-size: clamp(1.2rem, 3vh, 1.8rem); }
-#phase-timer { font-size: clamp(1.4rem, 3.5vh, 2.2rem); font-weight: 700; font-variant-numeric: tabular-nums; color: var(--accent); }
+#coach.hard { border-color: var(--high); }
+#coach.easy-piece { border-color: var(--easy); }
+.coach-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+#coach-stage {
+  font-size: clamp(1.4rem, 3.6vh, 2.4rem);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+}
+#coach.hard #coach-stage { color: var(--high); }
+#coach-pips { display: flex; gap: 8px; }
+#coach-pips span { width: 34px; height: 14px; border-radius: 7px; border: 2px solid var(--text-muted); }
+#coach-pips span.done { background: var(--text-muted); }
+#coach-pips span.now { background: var(--high); border-color: var(--high); }
+#coach-pips span.now.easy { background: var(--easy); border-color: var(--easy); }
+#guide-text { font-size: clamp(2rem, 6.5vh, 4.4rem); font-weight: 700; line-height: 1.1; margin-top: 1vh; }
+#guide-text.coach { font-size: clamp(1.6rem, 4.6vh, 3rem); }
+.guide-sub { color: var(--text-muted); font-size: clamp(1.2rem, 3.4vh, 2.2rem); }
+.coach-foot { margin-top: auto; display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; }
+#coach-clocks { display: flex; gap: 40px; }
+.clock .m-label { font-size: 0.95rem; }
+.clock-value {
+  font-size: clamp(2.2rem, 7.5vh, 5rem);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.05;
+}
+.clock.main .clock-value { color: var(--accent); }
 #phase-actions { display: flex; gap: 10px; flex-shrink: 0; }
 
-/* ---------- Charts ---------- */
-#charts {
-  grid-area: charts;
-  display: grid;
-  grid-template-columns: 1.6fr 1fr;
-  gap: 14px;
-  min-height: 0;
-}
+/* ---------- Force curve ---------- */
+#force-panel { grid-area: force; }
 .chart { display: flex; flex-direction: column; padding: 8px 12px 10px; min-height: 0; }
 .chart h3 { margin: 0 0 4px; font-size: 0.95rem; font-weight: 500; color: var(--text-muted); }
 .chart canvas { flex: 1; width: 100%; min-height: 0; }
+
+/* Whole-session heart rate in the wrap-up */
+.summary-chart { margin: 16px 0 6px; }
+#summary-hr-chart { display: block; width: 100%; height: 220px; }
 
 /* ---------- Alert banner ---------- */
 #alert-banner {
@@ -372,9 +397,6 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 }
 #chart-tip[hidden] { display: none; }
 
-/* ---------- Coach card (idle) ---------- */
-#guide-text.coach { font-size: clamp(1.3rem, 3.4vh, 2rem); font-weight: 600; }
-.guide-sub { color: var(--text-muted); font-size: 1.05rem; margin-top: 4px; }
 
 /* Diagnostics recording indicator */
 button.rec { color: #ff6b6b; border-color: #ff6b6b; }

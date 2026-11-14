@@ -85,7 +85,8 @@ export class Session {
   private lastTickAt = 0;
   private lastDistance: number | null = null;
   private lastCalories: number | null = null;
-  private hrAtStop = 0;
+  /** Heart rate when rowing stopped (start of the recovery check). */
+  hrAtStop = 0;
   private lastHr = 0;
   /** Interval session: the piece we were in at the last tick, to chime when it changes. */
   private lastPieceKey = '';
@@ -120,7 +121,9 @@ export class Session {
    * Interval session, main phase only: which piece you are in and how long it has left.
    * `rep` counts from 1. Null outside an interval session's main phase.
    */
-  intervalState(now = Date.now()): { hard: boolean; rep: number; reps: number; secondsLeft: number } | null {
+  intervalState(
+    now = Date.now(),
+  ): { hard: boolean; rep: number; reps: number; secondsIn: number; secondsLeft: number; last: boolean } | null {
     const iv = this.plan.intervals;
     if (this.phase !== 'main' || !iv) return null;
     const t = Math.max(0, (now - this.phaseStartedAt) / 1000);
@@ -129,7 +132,8 @@ export class Session {
     const within = t - rep * cycle;
     const hard = within < iv.workSec;
     const secondsLeft = Math.max(0, hard ? iv.workSec - within : cycle - within);
-    return { hard, rep: rep + 1, reps: iv.reps, secondsLeft };
+    const secondsIn = hard ? within : within - iv.workSec;
+    return { hard, rep: rep + 1, reps: iv.reps, secondsIn, secondsLeft, last: rep + 1 === iv.reps };
   }
 
   /**
