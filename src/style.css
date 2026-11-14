@@ -222,6 +222,7 @@ button.huge { font-size: 2rem; padding: 0.6em 1.6em; border-radius: 16px; }
 }
 #alert-banner.over { background: var(--over); color: white; }
 #alert-banner.nosignal { background: #e4e4e7; color: #18181b; }
+#alert-banner.waiting { background: var(--accent); color: #0b1220; font-weight: 700; }
 
 /* ---------- Simulator panel ---------- */
 #sim-panel {

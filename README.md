@@ -25,8 +25,9 @@ npm run dev        # open http://localhost:5173
 - **No-signal alarm:** if no valid HR arrives for 5 s, it shows `--` and warns. It never shows a stale number.
   (ErgometerJS only refreshes HR when the stroke phase changes; we poll it every second so it keeps updating when you stop.)
 - Session flow: standby → warm-up → workout → cool-down → 60 s recovery check → summary (time in zones, HR drop in 60 s).
-  **Standby:** after Start (which needs a heart-rate signal), the app waits until your first stroke, so you can get
-  settled on the rower first. The no-signal alarm stays quiet until you row; **Start now** starts the clock without rowing.
+  **Standby:** press Start at the laptop (no heart rate needed: the strap may be out of the receiver's range there),
+  then get on the rower. A blue "Waiting for heart-rate signal" banner shows until the strap is picked up; the session
+  begins with your first stroke. The no-signal alarm stays quiet until you row; **Start now** starts the clock without rowing.
 - Before a session, the second row shows the monitor's own distance, time and calories; during a session, the session's.
 - **Cancel session** (any time during a session) discards it: nothing is saved and the plan is unchanged, so today's
   session can still be done later.

@@ -213,9 +213,10 @@ function renderPhaseActions(today: Today, hasHr: boolean) {
   switch (session.phase) {
     case 'idle':
       if (today.kind === 'row') {
-        buttons.push(["Start today's session", () => startSession(today.plan), 'primary huge', !hasHr]);
+        // No heart rate needed to press Start: the strap may be out of the receiver's range at the laptop.
+        buttons.push(["Start today's session", () => startSession(today.plan), 'primary huge']);
       } else if (today.kind === 'rest' || today.kind === 'done-today') {
-        buttons.push(['Row anyway (free row)', () => startSession(freePlan()), '', !hasHr]);
+        buttons.push(['Row anyway (free row)', () => startSession(freePlan())]);
       } else if (today.kind === 'paused') {
         buttons.push(['My doctor has cleared me', resumeTrainer]);
       }
@@ -312,10 +313,9 @@ function guidance(zone: Zone, today: Today): [string, string] {
   }
 
   if (session.phase === 'standby') {
-    return [
-      'Standing by. The session starts with your first stroke.',
-      zone === 'nosignal' ? 'No heart-rate signal at the moment: check the strap.' : '',
-    ];
+    return zone === 'nosignal'
+      ? ['Standing by. Waiting for your heart rate.', 'It appears once you are close to the receiver. Then start rowing.']
+      : ['Heart rate OK. Start rowing when you are ready.', 'The session starts with your first stroke.'];
   }
 
   if (zone === 'nosignal') return ['No heart rate! Check the strap. Row very gently until it comes back.', ''];
@@ -389,6 +389,7 @@ function update() {
   alarm.update(zone, active);
   if (zone === 'over') showBanner('over', `HEART RATE ${tracker.bpm}: EASE OFF`);
   else if (zone === 'nosignal' && active) showBanner('nosignal', 'NO HEART RATE SIGNAL');
+  else if (zone === 'nosignal' && session.phase === 'standby') showBanner('waiting', 'Waiting for heart-rate signal…');
   else el.banner.hidden = true;
 
   // Rowing numbers (blank them if data stops coming, e.g. monitor asleep)
@@ -430,7 +431,7 @@ function update() {
   }
 }
 
-function showBanner(kind: 'over' | 'nosignal', text: string) {
+function showBanner(kind: 'over' | 'nosignal' | 'waiting', text: string) {
   el.banner.className = kind;
   el.banner.textContent = text;
   el.banner.hidden = false;
