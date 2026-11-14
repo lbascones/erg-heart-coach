@@ -41,7 +41,7 @@ report() {
   ps -eo pid,etime,args | grep -Ei 'gcr-prompter|gnome-keyring|seahorse|polkit|pkexec|exo-|xfce4-appfinder|zenity|xfce4-terminal|xterm|ssh-askpass|gh ' | grep -v grep
 
   section "Ctrl+Alt+T shortcut and preferred terminal"
-  xfconf-query -c xfce4-keyboard-shortcuts -l -v 2>/dev/null | grep -i '<alt>t\b\|<Alt>t '
+  xfconf-query -c xfce4-keyboard-shortcuts -l -v 2>/dev/null | grep -i 'alt>t '
   cat "$HOME/.config/xfce4/helpers.rc" 2>/dev/null || echo "(no helpers.rc: no preferred applications chosen)"
 
   section "Recent kernel messages about input devices"
