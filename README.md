@@ -181,7 +181,8 @@ Don't mount the laptop on the rower: it's too heavy for the monitor arm, would h
    WorkingDirectory=%h/erg-heart-coach
    ExecStart=/usr/bin/node server.js
    # Copy backups to Google Drive after each save (see "Google Drive backups" below). Add once rclone is set up.
-   #Environment=ROWING_AFTER_BACKUP=rclone copy %h/rowing-backups gdrive:rowing-backups
+   # Keep the quotes: without them systemd cuts the value at the first space.
+   #Environment="ROWING_AFTER_BACKUP=rclone copy %h/rowing-backups gdrive:rowing-backups"
    Restart=always
 
    [Install]
@@ -261,6 +262,11 @@ saved is lost.
    - scope: choose **drive.file** (rclone can only see files it creates, not the rest of your Drive);
    - accept the defaults for the rest, then sign in to Google in the browser window it opens.
 3. Test it: `rclone copy ~/rowing-backups gdrive:rowing-backups`. A `rowing-backups` folder appears in your Drive.
-4. The `ROWING_AFTER_BACKUP` line in `rowing.service` then copies new backups after every session. If the internet
+4. Turn on the automatic copy: in `~/.config/systemd/user/rowing.service`, remove the `#` in front of the
+   `Environment="ROWING_AFTER_BACKUP=..."` line (keep the quotes), then
+   `systemctl --user daemon-reload && systemctl --user restart rowing`.
+   To check it, save Settings once, then `journalctl --user -u rowing -n 5` should say
+   `after-backup command finished`.
+5. From then on, new backups and diagnostics files are copied after every save. If the internet
    is down at that moment, the next session's copy catches up (rclone copies everything that's missing).
    It uses `copy`, not `sync`, so deleting files on the laptop never deletes them from Drive.
