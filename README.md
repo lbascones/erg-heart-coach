@@ -40,8 +40,13 @@ npm run dev        # open http://localhost:5173
 
 The home screen tells you whether today is a rowing day and for how long.
 
-- **Levels 1–12:** from 3×10 min a week to 5×30 min (plus warm-up and cool-down). Intensity never rises:
-  you always row in your own heart-rate zone; only time and frequency grow.
+- **Zone (Settings):** *Easy* = target 60–70% of max heart rate, ceiling 80%; *Cardio* = target 70–80%, ceiling 85%.
+  Choosing a zone or typing a max heart rate (e.g. from a stress test) fills in the target and ceiling.
+- **Levels 1–12:** steady sessions grow from 3×10 min a week to 5×30 min (plus warm-up and cool-down), in your zone.
+- **Intervals:** from level 2, one session a week is intervals: harder pieces at the top of the zone up to the
+  ceiling (never above it), with easy rowing between. Level 2: 4×1 min (2 min easy) · 3: 5×1 · 4: 4×2 · 5: 5×2 ·
+  6: 4×3 · 7: 5×3 · 8+: 4×4 min (3 min easy). A chime marks each change. Intervals count toward levelling up:
+  good = felt ≤8/10, too hard = felt ≥9/10.
 - **After each session** you rate how hard it felt (1–10) and report any symptoms.
   - 3 good sessions (≥90% of planned time, felt ≤6/10, under 30 s over the ceiling) → next level.
   - Felt ≥8/10 or over 2 min above the ceiling → step back a level. Two cut-short sessions in a row → step back.

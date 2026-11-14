@@ -23,6 +23,7 @@ import {
   settingsAreDefaults,
   validate,
   withLimitsSource,
+  zoneLimits,
   type Settings,
 } from './settings';
 import { PM4Source } from './sources/pm4';
@@ -207,7 +208,11 @@ function renderPhaseActions(today: Today, hasHr: boolean) {
   if (key === renderedActionsKey) return;
   renderedActionsKey = key;
   el.phaseName.textContent =
-    session.phase === 'main' && session.plan.type === 'check' ? 'Fitness check' : PHASE_TITLE[session.phase];
+    session.phase === 'main' && session.plan.type === 'check'
+      ? 'Fitness check'
+      : session.phase === 'main' && session.plan.type === 'intervals'
+        ? 'Intervals'
+        : PHASE_TITLE[session.phase];
 
   const buttons: ActionButton[] = [];
   switch (session.phase) {
@@ -326,6 +331,19 @@ function guidance(zone: Zone, today: Today): [string, string] {
         ? [`Warm up gently. Stay below ${s.targetLow} bpm.`, '']
         : [`Warming up: ease off a little, stay below ${s.targetLow} bpm for now.`, ''];
     case 'main':
+      const piece = session.intervalState();
+      if (piece) {
+        const left = fmtTime(piece.secondsLeft);
+        if (piece.hard) {
+          const sub = `Hard piece ${piece.rep} of ${piece.reps}: ${left} left`;
+          if (zone === 'easy' || zone === 'high')
+            return [`Pick up the pace: aim for ${s.targetHigh}–${s.ceiling} bpm.`, sub];
+          return [`Good, hold this. Stay under ${s.ceiling}.`, sub];
+        }
+        const sub =
+          piece.rep < piece.reps ? `Next hard piece (${piece.rep + 1} of ${piece.reps}) in ${left}` : `Last easy stretch: ${left}`;
+        return ['Easy now: row gently and let your heart rate come down.', sub];
+      }
       if (session.plan.type === 'check') {
         const hr = session.plan.testHr!;
         if (zone === 'easy') return [`Fitness check: gently build up to ${hr} bpm.`, 'Steady and smooth, no sprints.'];
@@ -360,7 +378,15 @@ function update() {
 
   // During a fitness check's main part, "target" means a narrow band around the test HR.
   const checking = session.phase === 'main' && session.plan.type === 'check' && session.plan.testHr;
-  tracker.setTargetOverride(checking ? { low: session.plan.testHr! - 3, high: session.plan.testHr! + 3 } : null);
+  // During an interval session's hard pieces, "target" means the top of the zone up to the ceiling.
+  const hardPiece = session.intervalState(now)?.hard ?? false;
+  tracker.setTargetOverride(
+    checking
+      ? { low: session.plan.testHr! - 3, high: session.plan.testHr! + 3 }
+      : hardPiece
+        ? { low: settings.targetHigh, high: settings.ceiling }
+        : null,
+  );
   const zone = tracker.evaluate(now);
 
   // Re-check for a break regularly, so it is noticed even if the app was left running (kiosk mode).
@@ -380,7 +406,8 @@ function update() {
   // Zone colors and heart rate
   document.body.className = `zone-${zone}`;
   el.hrValue.textContent = zone === 'nosignal' ? '--' : String(tracker.bpm);
-  el.hrZoneLabel.textContent = checking && zone === 'target' ? 'On test heart rate' : ZONE_LABEL[zone];
+  el.hrZoneLabel.textContent =
+    checking && zone === 'target' ? 'On test heart rate' : hardPiece && zone === 'target' ? 'In hard-piece zone' : ZONE_LABEL[zone];
   positionZoneMarker(zone === 'nosignal' ? null : tracker.bpm);
 
   // Alarms and banner
@@ -473,7 +500,9 @@ async function scheduleNextReminder() {
   const msg =
     today.kind === 'row' && today.plan.type === 'check'
       ? 'Fitness check day: 10 minutes at a steady heart rate. Your rowing display is ready when you are.'
-      : `Rowing day: ${lvl.mainMin} minutes in your zone, plus warm-up and cool-down.`;
+      : today.kind === 'row' && today.plan.type === 'intervals'
+        ? `Interval day: ${today.plan.mainMinutes} minutes of harder pieces with easy rowing between, plus warm-up and cool-down.`
+        : `Rowing day: ${lvl.mainMin} minutes in your zone, plus warm-up and cool-down.`;
   try {
     await scheduleReminder(settings, when, msg);
   } catch (err) {
@@ -500,6 +529,7 @@ function fillForm(s: Settings) {
   const f = el.settingsForm.elements as any;
   for (const key of NUMBER_FIELDS) f[key].value = String((s as any)[key]);
   f.birthDate.value = s.birthDate;
+  f.zone.value = s.zone;
   f.birthDate.max = localIsoDate(new Date());
   f.sound.checked = s.sound;
   f.ntfyTopic.value = s.ntfyTopic;
@@ -512,6 +542,7 @@ function readForm(): Settings {
   const f = el.settingsForm.elements as any;
   const out: any = {
     birthDate: f.birthDate.value,
+    zone: f.zone.value,
     limitsFromAge: settings.limitsFromAge, // worked out again on save
     sound: f.sound.checked,
     ntfyTopic: f.ntfyTopic.value.trim(),
@@ -563,8 +594,16 @@ $('btn-estimate').addEventListener('click', () => {
     return;
   }
   el.settingsError.hidden = true;
-  fillForm({ ...current, ...defaultsForAge(age) });
+  fillForm({ ...current, ...defaultsForAge(age, current.zone) });
 });
+// Choosing a zone, or typing a max heart rate (e.g. from a stress test), fills in the target and ceiling.
+for (const name of ['zone', 'maxHr']) {
+  (el.settingsForm.elements.namedItem(name) as HTMLElement).addEventListener('change', () => {
+    const current = readForm();
+    if (!(current.maxHr >= 80 && current.maxHr <= 230)) return;
+    fillForm({ ...current, ...zoneLimits(current.maxHr, current.zone) });
+  });
+}
 // Changing the birth date keeps estimated limits in step; hand-entered limits are left alone.
 (el.settingsForm.elements.namedItem('birthDate') as HTMLInputElement).addEventListener('change', () => {
   const current = readForm();
@@ -572,7 +611,7 @@ $('btn-estimate').addEventListener('click', () => {
   showFormAge(age);
   if (age === null || age < 10 || age > 110) return;
   if (formAge !== null && formAge !== age && limitsMatchAge(current, formAge)) {
-    fillForm({ ...current, ...defaultsForAge(age) });
+    fillForm({ ...current, ...defaultsForAge(age, current.zone) });
   }
   formAge = age;
 });

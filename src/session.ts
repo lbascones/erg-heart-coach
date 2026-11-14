@@ -87,6 +87,8 @@ export class Session {
   private lastCalories: number | null = null;
   private hrAtStop = 0;
   private lastHr = 0;
+  /** Interval session: the piece we were in at the last tick, to chime when it changes. */
+  private lastPieceKey = '';
 
   constructor(private settings: Settings) {}
 
@@ -112,6 +114,22 @@ export class Session {
     if (this.phase === 'cooldown') return this.settings.cooldownMinutes * 60;
     if (this.phase === 'recovery') return RECOVERY_SECONDS;
     return null;
+  }
+
+  /**
+   * Interval session, main phase only: which piece you are in and how long it has left.
+   * `rep` counts from 1. Null outside an interval session's main phase.
+   */
+  intervalState(now = Date.now()): { hard: boolean; rep: number; reps: number; secondsLeft: number } | null {
+    const iv = this.plan.intervals;
+    if (this.phase !== 'main' || !iv) return null;
+    const t = Math.max(0, (now - this.phaseStartedAt) / 1000);
+    const cycle = iv.workSec + iv.easySec;
+    const rep = Math.min(iv.reps - 1, Math.floor(t / cycle));
+    const within = t - rep * cycle;
+    const hard = within < iv.workSec;
+    const secondsLeft = Math.max(0, hard ? iv.workSec - within : cycle - within);
+    return { hard, rep: rep + 1, reps: iv.reps, secondsLeft };
   }
 
   /**
@@ -174,7 +192,7 @@ export class Session {
     if (s.power > 0) this.power.add(s.power);
   }
 
-  /** Call about once a second. Returns true when the phase changed by itself (timer ran out). */
+  /** Call about once a second. Returns true when the phase changed by itself (timer ran out) or an interval piece changed. */
   tick(now: number, hr: number, zone: Zone): boolean {
     const dt = Math.min(5, (now - this.lastTickAt) / 1000);
     this.lastTickAt = now;
@@ -191,7 +209,8 @@ export class Session {
     }
     if (this.phase === 'main') {
       this.mainSec += dt;
-      if (zone === 'target' && this.lastPower > 0) this.targetPower.add(this.lastPower, dt);
+      // Interval sessions are left out: their "target" during the hard pieces is a different band.
+      if (zone === 'target' && this.lastPower > 0 && this.plan.type !== 'intervals') this.targetPower.add(this.lastPower, dt);
       if (this.plan.type === 'check' && this.plan.testHr && hasHr && this.lastPower > 0) {
         const left = this.phaseClock(now).seconds;
         if (left <= CHECK_SCORED_SECONDS && Math.abs(hr - this.plan.testHr) <= CHECK_HR_TOLERANCE) {
@@ -204,6 +223,12 @@ export class Session {
       this.hrTrace.push(hasHr ? hr : 0);
     }
 
+    // Chime when an interval piece starts or ends.
+    const piece = this.intervalState(now);
+    const pieceKey = piece ? `${piece.rep}|${piece.hard}` : '';
+    const pieceChanged = this.lastPieceKey !== '' && pieceKey !== '' && pieceKey !== this.lastPieceKey;
+    this.lastPieceKey = pieceKey;
+
     const clock = this.phaseClock(now);
     if (clock.countdown && clock.seconds <= 0) {
       if (this.phase === 'warmup') this.setPhase('main', now);
@@ -212,7 +237,7 @@ export class Session {
       else if (this.phase === 'recovery') this.setPhase('done', now);
       return true;
     }
-    return false;
+    return pieceChanged;
   }
 
   /** Builds the summary and adds it to the saved history. Call once when the phase becomes 'done'. */

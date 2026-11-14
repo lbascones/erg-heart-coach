@@ -95,6 +95,7 @@
           These numbers matter. The defaults are general estimates for your age, not medical advice.
           Ask your doctor for your own limits, especially if you take heart or blood-pressure medication
           (for example beta-blockers), which change heart rate.
+          Choosing a zone or typing a max heart rate fills in the target and ceiling from it; you can still change them.
           Estimated limits follow your birthdays automatically; limits you type in yourself are never changed.
         </p>
         <div class="form-grid">
@@ -102,6 +103,11 @@
             <input name="birthDate" type="date" min="1910-01-01" required /></label>
           <button type="button" id="btn-estimate" class="small">Fill estimates from age</button>
           <label>Max heart rate <input name="maxHr" type="number" min="80" max="230" required /></label>
+          <label>Zone
+            <select name="zone">
+              <option value="easy">Easy: 60–70% of max, ceiling 80%</option>
+              <option value="cardio">Cardio: 70–80% of max, ceiling 85%</option>
+            </select></label>
           <label>Target zone, low <input name="targetLow" type="number" min="40" max="220" required /></label>
           <label>Target zone, high <input name="targetHigh" type="number" min="40" max="220" required /></label>
           <label>Ceiling (alarm) <input name="ceiling" type="number" min="40" max="230" required /></label>

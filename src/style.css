@@ -283,7 +283,8 @@ dialog h2 { margin-top: 0; }
 .form-grid label { display: flex; flex-direction: column; gap: 6px; color: var(--text-muted); }
 .form-grid label.check { flex-direction: row; align-items: center; color: var(--text); }
 .form-grid input[type='number'],
-.form-grid input[type='date'] {
+.form-grid input[type='date'],
+.form-grid select {
   font: inherit;
   font-size: 1.3rem;
   color-scheme: dark;

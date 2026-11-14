@@ -8,6 +8,8 @@ export interface Settings {
    */
   limitsFromAge: number | null;
   maxHr: number;
+  /** Which band the targets were filled in for: 'easy' 60-70% of max, 'cardio' 70-80% (ceiling 80% / 85%). */
+  zone: ZoneChoice;
   /** Bottom of the target heart-rate zone (bpm). */
   targetLow: number;
   /** Top of the target heart-rate zone (bpm). */
@@ -24,6 +26,14 @@ export interface Settings {
   reminderHour: number;
 }
 
+export type ZoneChoice = 'easy' | 'cardio';
+
+/** Target band and ceiling as fractions of max heart rate. */
+export const ZONE_CHOICES: Record<ZoneChoice, { low: number; high: number; ceiling: number; label: string }> = {
+  easy: { low: 0.6, high: 0.7, ceiling: 0.8, label: 'Easy: 60–70% of max, ceiling 80%' },
+  cardio: { low: 0.7, high: 0.8, ceiling: 0.85, label: 'Cardio: 70–80% of max, ceiling 85%' },
+};
+
 const KEY = 'rowing.settings.v1';
 
 /** Tanaka formula, a common estimate. Only a starting point: real limits should come from a doctor. */
@@ -31,15 +41,20 @@ export function estimateMaxHr(age: number): number {
   return Math.round(208 - 0.7 * age);
 }
 
-/** Conservative beginner defaults: target 60-70% of estimated max, hard ceiling at 80%. */
-export function defaultsForAge(age: number): Pick<Settings, 'maxHr' | 'targetLow' | 'targetHigh' | 'ceiling'> {
-  const maxHr = estimateMaxHr(age);
+/** Target band and ceiling for a max heart rate and a zone choice. */
+export function zoneLimits(maxHr: number, zone: ZoneChoice): Pick<Settings, 'targetLow' | 'targetHigh' | 'ceiling'> {
+  const z = ZONE_CHOICES[zone] ?? ZONE_CHOICES.easy;
   return {
-    maxHr,
-    targetLow: Math.round(maxHr * 0.6),
-    targetHigh: Math.round(maxHr * 0.7),
-    ceiling: Math.round(maxHr * 0.8),
+    targetLow: Math.round(maxHr * z.low),
+    targetHigh: Math.round(maxHr * z.high),
+    ceiling: Math.round(maxHr * z.ceiling),
   };
+}
+
+/** Limits estimated from age for a zone choice (default: the easy band, 60-70% with the ceiling at 80%). */
+export function defaultsForAge(age: number, zone: ZoneChoice = 'easy'): Pick<Settings, 'maxHr' | 'targetLow' | 'targetHigh' | 'ceiling'> {
+  const maxHr = estimateMaxHr(age);
+  return { maxHr, ...zoneLimits(maxHr, zone) };
 }
 
 /** Age in whole years on the given day, or null if the birth date is missing or invalid. */
@@ -56,8 +71,11 @@ export function ageOn(birthDate: string, now: Date = new Date()): number | null 
 }
 
 /** True if the heart-rate limits are exactly the estimates for this age. */
-export function limitsMatchAge(s: Pick<Settings, 'maxHr' | 'targetLow' | 'targetHigh' | 'ceiling'>, age: number): boolean {
-  const d = defaultsForAge(age);
+export function limitsMatchAge(
+  s: Pick<Settings, 'maxHr' | 'targetLow' | 'targetHigh' | 'ceiling'> & { zone?: ZoneChoice },
+  age: number,
+): boolean {
+  const d = defaultsForAge(age, s.zone ?? 'easy');
   return s.maxHr === d.maxHr && s.targetLow === d.targetLow && s.targetHigh === d.targetHigh && s.ceiling === d.ceiling;
 }
 
@@ -74,12 +92,13 @@ export function withLimitsSource(s: Settings, now: Date = new Date()): Settings 
 export function refreshAgeLimits(s: Settings, now: Date = new Date()): Settings | null {
   const age = ageOn(s.birthDate, now);
   if (age === null || s.limitsFromAge === null || s.limitsFromAge === age) return null;
-  return { ...s, ...defaultsForAge(age), limitsFromAge: age };
+  return { ...s, ...defaultsForAge(age, s.zone), limitsFromAge: age };
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   birthDate: '',
   limitsFromAge: 62,
+  zone: 'easy',
   ...defaultsForAge(62),
   warmupMinutes: 5,
   cooldownMinutes: 5,
@@ -90,6 +109,7 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 export function validate(s: Settings): string | null {
+  if (!(s.zone in ZONE_CHOICES)) return 'Please choose a zone.';
   if (s.birthDate) {
     const age = ageOn(s.birthDate);
     if (age === null || age < 10 || age > 110) return 'Please check the birth date.';

@@ -5,8 +5,9 @@ import type { Settings } from './settings';
  * The virtual trainer: decides when you row and for how long, based on how your sessions go.
  *
  * Philosophy (conservative, for a deconditioned beginner):
- *  - Intensity never increases: you always row in your own heart-rate zone.
- *  - Duration grows first, then frequency, a small step at a time.
+ *  - Steady sessions stay in your own heart-rate zone; their length grows first, then how often you row.
+ *  - From level 2, one session a week is intervals: short harder pieces (top of the zone up to the
+ *    ceiling, never above it) with easy rowing between. The pieces get longer as the levels go up.
  *  - Moving up needs several good sessions; a too-hard session or time off steps you back.
  *  - Reporting symptoms pauses the plan until you confirm a doctor has cleared you.
  */
@@ -42,7 +43,38 @@ const FIRST_CHECK_AFTER_SESSIONS = 3;
 /** Fitness-check length (main part). */
 export const CHECK_MAIN_MIN = 10;
 
-export type SessionType = 'planned' | 'check' | 'free';
+/** Harder pieces with easy rowing between: reps x (workSec hard + easySec easy). */
+export interface IntervalSet {
+  reps: number;
+  workSec: number;
+  easySec: number;
+}
+
+/** The weekly interval session starts at this level. */
+export const INTERVALS_FROM_LEVEL = 2;
+/** Interval session for each level, from INTERVALS_FROM_LEVEL up (the last entry repeats). */
+export const INTERVALS: IntervalSet[] = [
+  { reps: 4, workSec: 60, easySec: 120 }, // level 2: 12 min
+  { reps: 5, workSec: 60, easySec: 120 }, // level 3: 15 min
+  { reps: 4, workSec: 120, easySec: 120 }, // level 4: 16 min
+  { reps: 5, workSec: 120, easySec: 120 }, // level 5: 20 min
+  { reps: 4, workSec: 180, easySec: 120 }, // level 6: 20 min
+  { reps: 5, workSec: 180, easySec: 120 }, // level 7: 25 min
+  { reps: 4, workSec: 240, easySec: 180 }, // level 8+: 28 min (the classic 4 x 4 minutes)
+];
+
+export function intervalsFor(level: number): IntervalSet | null {
+  if (level < INTERVALS_FROM_LEVEL) return null;
+  return INTERVALS[Math.min(INTERVALS.length, level - INTERVALS_FROM_LEVEL + 1) - 1];
+}
+
+/** E.g. "4 × 1 min harder, 2 min easy between". */
+export function describeIntervals(i: IntervalSet): string {
+  const m = (sec: number) => (sec % 60 ? `${(sec / 60).toFixed(1)} min` : `${sec / 60} min`);
+  return `${i.reps} × ${m(i.workSec)} harder, ${m(i.easySec)} easy between`;
+}
+
+export type SessionType = 'planned' | 'check' | 'free' | 'intervals';
 
 export interface SessionPlan {
   type: SessionType;
@@ -50,6 +82,8 @@ export interface SessionPlan {
   mainMinutes: number | null;
   /** Heart rate to hold during a fitness check. */
   testHr?: number;
+  /** Interval session only. */
+  intervals?: IntervalSet;
   level: number;
 }
 
@@ -76,6 +110,8 @@ export interface TrainerState {
   /** After a long break: run a fitness check once this many sessions are completed. */
   checkAfterSessions: number | null;
   sessionsCompleted: number;
+  /** When the last interval session was, so there is about one a week. */
+  lastIntervalsAt: number | null;
 }
 
 export type Today =
@@ -101,6 +137,7 @@ export function defaultTrainerState(): TrainerState {
     layoffSteps: 0,
     checkAfterSessions: null,
     sessionsCompleted: 0,
+    lastIntervalsAt: null,
   };
 }
 
@@ -240,6 +277,15 @@ export function planToday(t: TrainerState, s: Settings, now: number): Today {
       text: `Fitness check today: ${CHECK_MAIN_MIN} min holding ${hr} bpm. Keep the damper setting the same as always.`,
     };
   }
+  const intervals = intervalsFor(t.level);
+  if (intervals && (t.lastIntervalsAt === null || today - dayNumber(t.lastIntervalsAt) >= 7)) {
+    const mainSec = intervals.reps * (intervals.workSec + intervals.easySec);
+    return {
+      kind: 'row',
+      plan: { type: 'intervals', mainMinutes: mainSec / 60, intervals, level: t.level },
+      text: `Today: intervals, ${describeIntervals(intervals)} (level ${t.level} of ${LEVELS.length}).`,
+    };
+  }
   return {
     kind: 'row',
     plan: { type: 'planned', mainMinutes: lvl.mainMin, level: t.level },
@@ -251,8 +297,9 @@ export function planToday(t: TrainerState, s: Settings, now: number): Today {
  * Updates the trainer after a session and returns what it wants to tell you.
  * Rules:
  *  - symptoms: pause everything;
- *  - too hard (felt 8+/10 or over 2 min above the ceiling): step back a level;
- *  - good (90% of planned time, felt 6/10 or easier, under 30 s over the ceiling): count toward level-up;
+ *  - too hard (felt 8+/10, or 9+/10 for intervals, or over 2 min above the ceiling): step back a level;
+ *  - good (90% of planned time, felt 6/10 or easier (8/10 for intervals), under 30 s over the ceiling):
+ *    count toward level-up;
  *  - cut short twice in a row: step back a level.
  */
 export function recordSession(t: TrainerState, s: SessionSummary, fb: Feedback): string {
@@ -270,7 +317,10 @@ export function recordSession(t: TrainerState, s: SessionSummary, fb: Feedback):
   }
 
   const overSec = s.zoneSeconds.over;
-  const tooHard = fb.rpe >= 8 || overSec > 120;
+  // Intervals are meant to feel hard; steady sessions are not.
+  const hardRpe = s.type === 'intervals' ? 9 : 8;
+  const tooHard = fb.rpe >= hardRpe || overSec > 120;
+  if (s.type === 'intervals') t.lastIntervalsAt = s.startedAt;
   let msg: string;
 
   if (s.type === 'check') {
@@ -289,7 +339,7 @@ export function recordSession(t: TrainerState, s: SessionSummary, fb: Feedback):
     msg = 'Free row logged. It counts toward rest days, but not toward leveling up.';
   } else {
     const ratio = s.plannedMainSec ? s.mainSec / s.plannedMainSec : 1;
-    const good = ratio >= 0.9 && fb.rpe <= 6 && overSec < 30;
+    const good = ratio >= 0.9 && fb.rpe <= (s.type === 'intervals' ? 8 : 6) && overSec < 30;
     if (tooHard) {
       t.goodStreak = 0;
       t.shortStreak = 0;
