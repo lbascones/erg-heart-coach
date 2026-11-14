@@ -54,13 +54,13 @@ export interface IntervalSet {
 export const INTERVALS_FROM_LEVEL = 2;
 /** Interval session for each level, from INTERVALS_FROM_LEVEL up (the last entry repeats). */
 export const INTERVALS: IntervalSet[] = [
-  { reps: 4, workSec: 60, easySec: 120 }, // level 2: 12 min
-  { reps: 5, workSec: 60, easySec: 120 }, // level 3: 15 min
-  { reps: 4, workSec: 120, easySec: 120 }, // level 4: 16 min
-  { reps: 5, workSec: 120, easySec: 120 }, // level 5: 20 min
-  { reps: 4, workSec: 180, easySec: 120 }, // level 6: 20 min
-  { reps: 5, workSec: 180, easySec: 120 }, // level 7: 25 min
-  { reps: 4, workSec: 240, easySec: 180 }, // level 8+: 28 min (the classic 4 x 4 minutes)
+  { reps: 4, workSec: 60, easySec: 120 }, // level 2: 10 min
+  { reps: 5, workSec: 60, easySec: 120 }, // level 3: 13 min
+  { reps: 4, workSec: 120, easySec: 120 }, // level 4: 14 min
+  { reps: 5, workSec: 120, easySec: 120 }, // level 5: 18 min
+  { reps: 4, workSec: 180, easySec: 120 }, // level 6: 18 min
+  { reps: 5, workSec: 180, easySec: 120 }, // level 7: 23 min
+  { reps: 4, workSec: 240, easySec: 180 }, // level 8+: 25 min (the classic 4 x 4 minutes)
 ];
 
 export function intervalsFor(level: number): IntervalSet | null {
@@ -279,7 +279,8 @@ export function planToday(t: TrainerState, s: Settings, now: number): Today {
   }
   const intervals = intervalsFor(t.level);
   if (intervals && (t.lastIntervalsAt === null || today - dayNumber(t.lastIntervalsAt) >= 7)) {
-    const mainSec = intervals.reps * (intervals.workSec + intervals.easySec);
+    // The workout ends right after the last hard piece, so the heart-rate drop is measured from a hard effort.
+    const mainSec = intervals.reps * intervals.workSec + (intervals.reps - 1) * intervals.easySec;
     return {
       kind: 'row',
       plan: { type: 'intervals', mainMinutes: mainSec / 60, intervals, level: t.level },

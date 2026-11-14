@@ -195,7 +195,6 @@ const PHASE_TITLE: Record<Phase, string> = {
   warmup: 'Warm-up',
   main: 'Workout',
   cooldown: 'Cool-down',
-  recovery: 'Recovery check',
   done: 'Done',
 };
 
@@ -237,9 +236,6 @@ function renderPhaseActions(today: Today, hasHr: boolean) {
       break;
     case 'cooldown':
       buttons.push(['Finish', () => session.finish(), 'primary big']);
-      break;
-    case 'recovery':
-      buttons.push(['Skip', () => session.finish()]);
       break;
   }
   if (session.phase !== 'idle' && session.phase !== 'done') {
@@ -351,10 +347,16 @@ function guidance(zone: Zone, today: Today): [string, string] {
       if (zone === 'target') return ["You're in the zone. Hold this effort.", `Target: ${range} bpm.`];
       return ['Ease back into your target.', `Back under ${s.targetHigh} bpm.`];
     }
-    case 'cooldown':
-      return ['Cool down.', 'Easy strokes. Let your heart rate come down.'];
-    case 'recovery':
-      return ['Session complete! Stop rowing.', 'Sit still: measuring how far your heart rate drops in 1 minute.'];
+    case 'cooldown': {
+      if (session.dropSecondsLeft() !== null) {
+        return ['Workout done! Keep rowing easily.', 'Measuring how far your heart rate drops in the first minute.'];
+      }
+      const drop = session.hrDropTo ? session.hrDropFrom - session.hrDropTo : null;
+      return [
+        'Cool down: easy strokes.',
+        drop !== null ? `Heart rate dropped ${drop} bpm in the first minute.` : 'Let your heart rate come down.',
+      ];
+    }
     default:
       return ['', ''];
   }
@@ -381,7 +383,7 @@ function renderCoach(now: number) {
       if (piece) {
         stage = piece.hard ? `Hard piece ${piece.rep} of ${piece.reps}` : `Easy · after piece ${piece.rep} of ${piece.reps}`;
         clocks.push([piece.hard ? 'In this piece' : 'Easy so far', piece.secondsIn]);
-        clocks.push([piece.hard ? 'Easy in' : piece.last ? 'Cool-down in' : 'Next hard piece in', piece.secondsLeft, true]);
+        clocks.push([piece.hard ? (piece.last ? 'Cool-down in' : 'Easy in') : 'Next hard piece in', piece.secondsLeft, true]);
         clocks.push(['Workout left', clock.seconds]);
       } else if (session.plan.type === 'check') {
         stage = 'Fitness check';
@@ -394,21 +396,22 @@ function renderCoach(now: number) {
         clocks.push(['Rowing for', inPhase, true]);
       }
       break;
-    case 'cooldown':
+    case 'cooldown': {
       stage = 'Cool-down';
-      clocks.push(['Cool-down left', clock.seconds, true]);
-      break;
-    case 'recovery':
-      stage = 'Heart-rate drop';
-      clocks.push(['Measuring', clock.seconds, true]);
-      if (session.hrAtStop) {
-        clocks.push(['When you stopped', `${session.hrAtStop}`]);
+      const measuring = session.dropSecondsLeft(now);
+      if (measuring !== null) {
+        clocks.push(['Measuring HR drop', measuring, true]);
+        clocks.push(['End of workout', `${session.hrDropFrom}`]);
         if (tracker.hasSignal()) {
-          const drop = session.hrAtStop - tracker.bpm;
+          const drop = session.hrDropFrom - tracker.bpm;
           clocks.push(['Drop so far', drop >= 0 ? `${drop}` : `up ${-drop}`]);
         }
+      } else {
+        clocks.push(['Cool-down left', clock.seconds, true]);
+        if (session.hrDropTo) clocks.push(['HR drop, 1st minute', `${session.hrDropFrom - session.hrDropTo}`]);
       }
       break;
+    }
   }
 
   el.coachStage.textContent = stage;
@@ -745,7 +748,7 @@ function showSummary(s: SessionSummary) {
     ['nosignal', 'No signal'],
   ];
   const total = Math.max(1, Object.values(s.zoneSeconds).reduce((a, b) => a + b, 0));
-  const drop = s.hrAtStop && s.hrAfterRecovery ? s.hrAtStop - s.hrAfterRecovery : null;
+  const drop = s.hrDropFrom && s.hrDropTo ? s.hrDropFrom - s.hrDropTo : null;
   const tile = (label: string, value: string) =>
     `<div class="metric"><div class="m-label">${label}</div><div class="m-value">${value}</div></div>`;
   const fifth =
@@ -759,7 +762,7 @@ function showSummary(s: SessionSummary) {
       ${fifth}
       ${tile('Avg HR', s.avgHr ? String(s.avgHr) : '--')}
       ${tile('Max HR', s.maxHr ? String(s.maxHr) : '--')}
-      ${tile('HR drop in 60 s', drop !== null ? `${drop} bpm` : '--')}
+      ${tile('HR drop, 1st min of cool-down', drop === null ? '--' : drop >= 0 ? `${drop} bpm` : `up ${-drop}`)}
     </div>
     <div class="m-label">Time in each zone</div>
     <div class="zone-split">

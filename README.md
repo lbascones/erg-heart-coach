@@ -26,9 +26,13 @@ npm run dev        # open http://localhost:5173
   (ErgometerJS only refreshes HR when the stroke phase changes; we poll it every second so it keeps updating when you stop.)
 - **Coach panel** (bottom left, beside the force curve): the stage (warm-up, hard piece 2 of 4, cool-down…), a large
   instruction (push harder, you're in the zone, ease back…), and the clocks that matter now (time in this piece,
-  time to the next one, workout left; in the recovery check, HR when you stopped and the drop so far).
-- Session flow: standby → warm-up → workout → cool-down → 60 s recovery check → summary (time in zones, HR drop in 60 s,
-  heart-rate graph of the whole session). Stop rowing when the cool-down ends: the recovery check needs you sitting still.
+  time to the next one, workout left; in the cool-down's first minute, HR at the end of the workout and the drop so far).
+- Session flow: standby → warm-up → workout → cool-down → summary (time in zones, HR drop, heart-rate graph of the
+  whole session).
+- **Heart-rate drop:** HR at the end of the workout, and again after the first minute of the cool-down while you keep
+  rowing easily (the way exercise tests measure it, so it compares with published values: 12 bpm or less is low,
+  15–25 typical, 30+ well trained). Interval sessions end right after the last hard piece. The progress chart shows
+  steady sessions and fitness checks only, since interval days drop further.
   **Standby:** press Start at the laptop (no heart rate needed: the strap may be out of the receiver's range there),
   then get on the rower. A blue "Waiting for heart-rate signal" banner shows until the strap is picked up; the session
   begins with your first stroke. The no-signal alarm stays quiet until you row; **Start now** starts the clock without rowing.
@@ -60,7 +64,7 @@ The home screen tells you whether today is a rowing day and for how long.
   8+ days → back 1 level, 14+ → 2, 21+ → 3, 28+ → 4 (plus a fitness check soon after), 60+ → level 1.
 - **Fitness check** every 4 weeks: 10 min holding the same test heart rate; the last 5 min are scored.
   More watts at the same heart rate = fitter. Keep the damper setting the same every time.
-- **Progress screen:** fitness-check results, watts in your zone, heart-rate drop 60 s after stopping,
+- **Progress screen:** fitness-check results, watts in your zone, heart-rate drop in the first minute of cool-down (steady sessions),
   minutes per week vs. your level's goal. **Export data** regularly: history lives in the browser.
 
 ### Phone reminders (ntfy)

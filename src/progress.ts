@@ -242,7 +242,8 @@ export function renderProgress(els: ProgressEls, trainer: TrainerState) {
   }
 
   const totalKm = history.reduce((a, s) => a + s.distance, 0) / 1000;
-  const recoveries = history.filter(hasRecovery);
+  // Steady sessions and fitness checks only: interval days end on a hard piece and drop further, which would blur the trend.
+  const recoveries = history.filter((x) => (x.type === 'planned' || x.type === 'check') && hasDrop(x));
   const lastRec = recoveries.at(-1);
   const tile = (label: string, value: string, sub = '') =>
     `<div class="metric"><div class="m-label">${label}</div><div class="m-value">${value}</div><div class="m-sub">${sub}</div></div>`;
@@ -255,7 +256,7 @@ export function renderProgress(els: ProgressEls, trainer: TrainerState) {
     tile('Current plan', `${lvl.mainMin} min`, `${lvl.perWeek}× a week`),
     tile('This week', `${Math.round(weeks.at(-1)!.minutes)} min`, `goal ${lvl.perWeek * lvl.mainMin} min`),
     tile('Sessions', String(history.length), `${totalKm.toFixed(1)} km total`),
-    tile('HR recovery', lastRec ? `${lastRec.hrAtStop - lastRec.hrAfterRecovery}` : '--', 'bpm drop in 60 s, latest'),
+    tile('HR drop', lastRec ? `${lastRec.hrDropFrom! - lastRec.hrDropTo!}` : '--', 'bpm in 1st min of cool-down, latest'),
   ].join('');
 
   const checks = history.filter((s) => s.type === 'check' && s.checkWatts);
@@ -276,10 +277,10 @@ export function renderProgress(els: ProgressEls, trainer: TrainerState) {
     els.recovery,
     recoveries.map((s) => ({
       t: s.startedAt,
-      v: s.hrAtStop - s.hrAfterRecovery,
-      tip: `${fmtDate(s.startedAt)}: ${s.hrAtStop} → ${s.hrAfterRecovery} bpm (−${s.hrAtStop - s.hrAfterRecovery})`,
+      v: s.hrDropFrom! - s.hrDropTo!,
+      tip: `${fmtDate(s.startedAt)}: ${s.hrDropFrom} → ${s.hrDropTo} bpm (−${s.hrDropFrom! - s.hrDropTo!})`,
     })),
-    'Finish a session with the 60 s recovery check to see this',
+    'Appears after a steady session with a full first minute of cool-down',
     true,
   );
   weeklyChart(
@@ -289,6 +290,6 @@ export function renderProgress(els: ProgressEls, trainer: TrainerState) {
   );
 }
 
-function hasRecovery(s: SessionSummary) {
-  return s.hrAtStop > 0 && s.hrAfterRecovery > 0;
+function hasDrop(s: SessionSummary) {
+  return (s.hrDropFrom ?? 0) > 0 && (s.hrDropTo ?? 0) > 0;
 }

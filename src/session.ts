@@ -4,10 +4,13 @@ import type { RowerSample } from './sources/source';
 import type { SessionPlan, SessionType } from './trainer';
 
 /** 'standby': Start was pressed, waiting for the first stroke (the laptop is out of reach from the seat). */
-export type Phase = 'idle' | 'standby' | 'warmup' | 'main' | 'cooldown' | 'recovery' | 'done';
+export type Phase = 'idle' | 'standby' | 'warmup' | 'main' | 'cooldown' | 'done';
 
-/** How long to sit still after finishing while we measure heart-rate recovery. */
-export const RECOVERY_SECONDS = 60;
+/**
+ * Heart-rate drop: HR at the end of the workout, and again this long into the cool-down (still rowing easily).
+ * This is how exercise tests measure heart-rate recovery, so the numbers compare with published values.
+ */
+export const HR_DROP_SECONDS = 60;
 /** Fitness check: only the last part of the main phase is scored, once HR has settled. */
 const CHECK_SCORED_SECONDS = 5 * 60;
 /** Fitness check: HR samples further than this from the test HR are ignored. */
@@ -33,9 +36,12 @@ export interface SessionSummary {
   /** Fitness check only: heart rate held and average watts at it. */
   testHr?: number;
   checkWatts?: number;
-  /** HR when you stopped rowing, and 60 s later. The drop is a good fitness indicator. */
-  hrAtStop: number;
-  hrAfterRecovery: number;
+  /** HR at the end of the workout and after the first minute of the cool-down (0 = not measured). */
+  hrDropFrom?: number;
+  hrDropTo?: number;
+  /** Older sessions: HR after the cool-down and 60 s later sitting still (no longer measured). */
+  hrAtStop?: number;
+  hrAfterRecovery?: number;
   /** Heart rate every 5 s, for charts and future comparisons. */
   hrTrace: number[];
   settingsUsed: Pick<Settings, 'targetLow' | 'targetHigh' | 'ceiling' | 'maxHr'>;
@@ -85,9 +91,12 @@ export class Session {
   private lastTickAt = 0;
   private lastDistance: number | null = null;
   private lastCalories: number | null = null;
-  /** Heart rate when rowing stopped (start of the recovery check). */
-  hrAtStop = 0;
+  /** Heart-rate drop: HR at the end of the workout, and after the first minute of the cool-down. */
+  hrDropFrom = 0;
+  hrDropTo = 0;
+  private dropDone = false;
   private lastHr = 0;
+  private lastHrAt = 0;
   /** Interval session: the piece we were in at the last tick, to chime when it changes. */
   private lastPieceKey = '';
 
@@ -113,7 +122,6 @@ export class Session {
     if (this.phase === 'warmup') return this.settings.warmupMinutes * 60;
     if (this.phase === 'main' && this.plan.mainMinutes !== null) return this.plan.mainMinutes * 60;
     if (this.phase === 'cooldown') return this.settings.cooldownMinutes * 60;
-    if (this.phase === 'recovery') return RECOVERY_SECONDS;
     return null;
   }
 
@@ -165,13 +173,18 @@ export class Session {
 
   beginCooldown(now = Date.now()) {
     if (this.phase === 'warmup' || this.phase === 'main') {
-      this.setPhase(this.settings.cooldownMinutes > 0 ? 'cooldown' : 'recovery', now);
+      this.setPhase(this.settings.cooldownMinutes > 0 ? 'cooldown' : 'done', now);
     }
   }
 
   finish(now = Date.now()) {
-    if (this.rowingPhase) this.setPhase('recovery', now);
-    else if (this.phase === 'recovery') this.setPhase('done', now);
+    if (this.rowingPhase) this.setPhase('done', now);
+  }
+
+  /** Seconds until the heart-rate drop is measured, or null when it is not being measured right now. */
+  dropSecondsLeft(now = Date.now()): number | null {
+    if (this.phase !== 'cooldown' || this.dropDone || !this.hrDropFrom) return null;
+    return Math.max(0, HR_DROP_SECONDS - (now - this.phaseStartedAt) / 1000);
   }
 
   reset() {
@@ -179,7 +192,8 @@ export class Session {
   }
 
   private setPhase(p: Phase, now: number) {
-    if (p === 'recovery') this.hrAtStop = this.lastHr;
+    // The drop is measured from the last fresh reading of the workout.
+    if (p === 'cooldown') this.hrDropFrom = now - this.lastHrAt <= 5000 ? this.lastHr : 0;
     this.phase = p;
     this.phaseStartedAt = now;
   }
@@ -201,7 +215,10 @@ export class Session {
     const dt = Math.min(5, (now - this.lastTickAt) / 1000);
     this.lastTickAt = now;
     const hasHr = zone !== 'nosignal';
-    if (hasHr) this.lastHr = hr;
+    if (hasHr) {
+      this.lastHr = hr;
+      this.lastHrAt = now;
+    }
     if (this.phase === 'idle' || this.phase === 'standby' || this.phase === 'done') return false;
 
     if (this.rowingPhase) {
@@ -227,6 +244,11 @@ export class Session {
       this.hrTrace.push(hasHr ? hr : 0);
     }
 
+    if (this.phase === 'cooldown' && !this.dropDone && (now - this.phaseStartedAt) / 1000 >= HR_DROP_SECONDS) {
+      this.dropDone = true;
+      if (hasHr && this.hrDropFrom) this.hrDropTo = hr;
+    }
+
     // Chime when an interval piece starts or ends.
     const piece = this.intervalState(now);
     const pieceKey = piece ? `${piece.rep}|${piece.hard}` : '';
@@ -237,8 +259,7 @@ export class Session {
     if (clock.countdown && clock.seconds <= 0) {
       if (this.phase === 'warmup') this.setPhase('main', now);
       else if (this.phase === 'main') this.beginCooldown(now);
-      else if (this.phase === 'cooldown') this.setPhase('recovery', now);
-      else if (this.phase === 'recovery') this.setPhase('done', now);
+      else if (this.phase === 'cooldown') this.setPhase('done', now);
       return true;
     }
     return pieceChanged;
@@ -263,8 +284,8 @@ export class Session {
       plannedMainSec: (this.plan.mainMinutes ?? 0) * 60,
       // Require a minute (n = seconds) of in-zone data so a few stray samples don't produce a misleading number.
       targetWatts: this.targetPower.n >= 60 ? this.targetPower.value : 0,
-      hrAtStop: this.hrAtStop,
-      hrAfterRecovery: this.lastHr,
+      hrDropFrom: this.hrDropTo ? this.hrDropFrom : 0,
+      hrDropTo: this.hrDropTo,
       hrTrace: this.hrTrace.slice(),
       settingsUsed: { targetLow: s.targetLow, targetHigh: s.targetHigh, ceiling: s.ceiling, maxHr: s.maxHr },
     };
