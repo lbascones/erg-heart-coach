@@ -24,6 +24,8 @@ export class PM4Source extends RowerSource {
   private reconnectTimer: number | undefined;
   private hrInFlight = false;
   private lastHrAt = 0;
+  /** ErgometerJS publishes each stroke's data twice; skip the repeat. */
+  private lastSampleKey = '';
   private stopped = false;
 
   static isSupported(): boolean {
@@ -80,7 +82,8 @@ export class PM4Source extends RowerSource {
     try {
       const devices = await pm.requestDevics();
       if (!devices.length) throw new Error('No Concept2 monitor found');
-      tapHidDevice(devices[0]._deviceInfo);
+      // devices[0] is ErgometerJS's wrapper; the browser's HIDDevice is two levels down.
+      tapHidDevice(devices[0]._internalDevice?._deviceInfo);
       diag.log('pm-connecting', { productId: devices[0].productId, productName: devices[0].productName });
       await pm.connectToDevice(devices[0]);
       this.emit('status', 'connected', devices[0].productName);
@@ -144,13 +147,18 @@ export class PM4Source extends RowerSource {
 
     pm.strokeDataEvent.sub(this, (d: any) => {
       const now = Date.now();
+      const key = `${d.strokeCount}|${d.workTime}|${d.distance}`;
+      if (key === this.lastSampleKey) return;
+      this.lastSampleKey = key;
+      const spm = d.strokesPerMinute ?? 0;
       this.emit('sample', {
         time: now,
         elapsed: (d.workTime ?? 0) / 1000,
         distance: d.distance ?? 0,
         pace: (d.splitTime ?? 0) / 1000,
         power: d.power ?? 0,
-        spm: d.strokesPerMinute ?? 0,
+        // The first stroke after a pause can report an impossible rate (66 seen on a PM3): hide it.
+        spm: spm <= 60 ? spm : 0,
         calories: d.totCalories ?? 0,
         strokeCount: d.strokeCount ?? 0,
         dragFactor: d.dragFactor ?? 0,
@@ -177,7 +185,8 @@ export class PM4Source extends RowerSource {
    */
   private pollHeartRate() {
     if (!this.isConnected() || this.hrInFlight) return;
-    if (Date.now() - this.lastHrAt < HR_POLL_MS) return;
+    // Small margin: timer jitter would otherwise skip every other poll (HR only every 2 s).
+    if (Date.now() - this.lastHrAt < HR_POLL_MS - 200) return;
     this.hrInFlight = true;
     this.pm
       .newCsafeBuffer()

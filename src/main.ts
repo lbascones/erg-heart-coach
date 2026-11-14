@@ -338,8 +338,14 @@ let lastSessionTick = 0;
 let lastChartDraw = 0;
 let lastLayoffCheck = Date.now();
 
+let loggedPhase = '';
+
 function update() {
   const now = Date.now();
+  if (session.phase !== loggedPhase) {
+    diag.log('phase', { from: loggedPhase, to: session.phase });
+    loggedPhase = session.phase;
+  }
 
   // During a fitness check's main part, "target" means a narrow band around the test HR.
   const checking = session.phase === 'main' && session.plan.type === 'check' && session.plan.testHr;
