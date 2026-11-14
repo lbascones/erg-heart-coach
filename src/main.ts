@@ -882,5 +882,15 @@ void scheduleNextReminder();
     await useSource(new PM4Source(), false).catch(() => {
       el.connectOverlay.hidden = true; // PM4 source keeps retrying in the background
     });
+  } else if ('hid' in navigator) {
+    // The monitor is asleep (a sleeping PM disappears from USB). Connect as soon as it is woken up,
+    // without a tap, as long as nothing else was chosen on the connect screen in the meantime.
+    const hid = (navigator as any).hid;
+    const onWake = async () => {
+      if (source || !(await PM4Source.hasGrantedDevice())) return;
+      hid.removeEventListener('connect', onWake);
+      await useSource(new PM4Source(), false).catch(() => (el.connectOverlay.hidden = true));
+    };
+    hid.addEventListener('connect', onWake);
   }
 })();
