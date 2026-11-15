@@ -245,6 +245,22 @@ When the code on GitHub changes (for example after a fix), bring the laptop up t
 `git pull` only fetches; your sessions, settings and backups are stored elsewhere and are never touched.
 If `git pull` asks for a login, the repo has been made private again: see step 2 of the setup.
 
+## Bluetooth speaker and Spotify
+
+The app's chimes and alarms play on the laptop's default sound output, so with a Bluetooth speaker connected they
+come out of the speaker, mixed with the music.
+
+1. Once: `bash ~/erg-heart-coach/scripts/bluetooth-audio.sh setup` (Bluetooth audio support, Blueman,
+   PulseAudio Volume Control, Spotify).
+2. Once: put the speaker in pairing mode, then `bash ~/erg-heart-coach/scripts/bluetooth-audio.sh pair`.
+   The speaker is marked trusted, so later it reconnects by itself when switched on.
+   If it doesn't: `bash ~/erg-heart-coach/scripts/bluetooth-audio.sh connect`.
+3. Start Spotify on the laptop (it stays behind the kiosk window) and control it from the phone's Spotify app:
+   the devices button lists the laptop.
+4. Balance music against the chimes in **PulseAudio Volume Control → Playback**: lower Spotify, keep Chrome high.
+
+`bash ~/erg-heart-coach/scripts/bluetooth-audio.sh` alone records a report in `~/rowing-backups/diagnostics`.
+
 ## Diagnostics
 
 When something doesn't work with the monitor (no data, dropouts, odd numbers), record a diagnostics file:
