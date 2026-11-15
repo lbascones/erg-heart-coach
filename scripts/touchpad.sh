@@ -6,6 +6,8 @@
 #   bash ~/erg-heart-coach/scripts/touchpad.sh setup    # tap-to-click on, Ctrl+Alt+T terminal set, steadier touchpad
 #                                                       # connection (needs a restart afterwards)
 #   bash ~/erg-heart-coach/scripts/touchpad.sh undo     # take back the touchpad connection change (needs a restart)
+#   bash ~/erg-heart-coach/scripts/touchpad.sh revive   # quick revive, no report and no password (what Ctrl+Alt+P runs
+#                                                       # once setup has been run); each one is logged in touchpad-revives.log
 #
 # Run it WHILE the trackpad is frozen (the keyboard still works: Alt+Tab to a terminal you left open).
 # The report goes to ~/rowing-backups/diagnostics/touchpad-<date>-<time>.txt, so it reaches Google Drive with the
@@ -13,7 +15,7 @@
 
 set -u
 MODE="${1:-fix}"
-case "$MODE" in check|fix|setup|undo) ;; *) echo "Unknown mode '$MODE'. Use: check, fix, setup or undo."; exit 1 ;; esac
+case "$MODE" in check|fix|setup|undo|revive) ;; *) echo "Unknown mode '$MODE'. Use: check, fix, setup, undo or revive."; exit 1 ;; esac
 GRUB=/etc/default/grub
 GRUB_BACKUP=/etc/default/grub.before-touchpad
 KERNEL_OPT=psmouse.synaptics_intertouch=1
@@ -21,6 +23,23 @@ OUT_DIR="$HOME/rowing-backups/diagnostics"
 mkdir -p "$OUT_DIR"
 REPORT="$OUT_DIR/touchpad-$(date +%Y-%m-%d-%H%M%S)${MODE:+-$MODE}.txt"
 export DISPLAY="${DISPLAY:-:0}"
+SUDOERS=/etc/sudoers.d/touchpad-revive
+SHORTCUT='/commands/custom/<Primary><Alt>p'
+REVIVE_LOG="$OUT_DIR/touchpad-revives.log"
+
+# Quick revive for the Ctrl+Alt+P shortcut: reload the driver without a password (allowed by the setup), log it.
+if [ "$MODE" = revive ]; then
+  {
+    echo "== Revive $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "Kernel messages in the last 15 minutes:"
+    journalctl -k --since '-15min' --no-pager 2>/dev/null | tail -n 15
+    if sudo -n /usr/sbin/modprobe -r psmouse && sudo -n /usr/sbin/modprobe psmouse; then echo "psmouse reloaded"
+    else echo "Reload failed (has 'touchpad.sh setup' been run?)"; fi
+  } >>"$REVIVE_LOG" 2>&1
+  notify-send -t 3000 "Touchpad" "Touchpad driver restarted" 2>/dev/null
+  rclone listremotes 2>/dev/null | grep -q '^gdrive:' && rclone copy "$REVIVE_LOG" gdrive:rowing-backups/diagnostics 2>/dev/null
+  exit 0
+fi
 
 section() { printf '\n== %s\n' "$1"; }
 
@@ -100,6 +119,21 @@ setup() {
     fi
   fi
   grep '^GRUB_CMDLINE_LINUX_DEFAULT' "$GRUB"
+
+  section "4. Ctrl+Alt+P revives a frozen touchpad (no terminal, no password)"
+  echo "$USER ALL=(root) NOPASSWD: /usr/sbin/modprobe -r psmouse, /usr/sbin/modprobe psmouse" >/tmp/touchpad-revive.sudoers
+  if sudo visudo -cf /tmp/touchpad-revive.sudoers >/dev/null; then
+    sudo install -m 0440 /tmp/touchpad-revive.sudoers "$SUDOERS" && echo "   Driver restart allowed without a password ($SUDOERS)."
+  else
+    echo "   Could not write the password exception; the shortcut will not work."
+  fi
+  rm -f /tmp/touchpad-revive.sudoers
+  xfconf-query -c xfce4-keyboard-shortcuts -p "$SHORTCUT" -n -t string     -s "bash $HOME/erg-heart-coach/scripts/touchpad.sh revive" 2>/dev/null     || xfconf-query -c xfce4-keyboard-shortcuts -p "$SHORTCUT" -s "bash $HOME/erg-heart-coach/scripts/touchpad.sh revive"
+  echo "   Shortcut: $(xfconf-query -c xfce4-keyboard-shortcuts -p "$SHORTCUT" 2>&1)"
+
+  section "5. New windows come to the front (also when opened by touch)"
+  xfconf-query -c xfwm4 -p /general/prevent_focus_stealing -s false 2>/dev/null     || xfconf-query -c xfwm4 -p /general/prevent_focus_stealing -n -t bool -s false
+  echo "   Focus-stealing prevention: $(xfconf-query -c xfwm4 -p /general/prevent_focus_stealing 2>&1)"
 }
 
 undo() {
@@ -113,6 +147,7 @@ undo() {
     echo "   Removed."
   fi
   grep '^GRUB_CMDLINE_LINUX_DEFAULT' "$GRUB"
+  echo "   (Ctrl+Alt+P and its password exception stay: they work with either connection.)"
 }
 
 {
@@ -149,5 +184,6 @@ if rclone listremotes 2>/dev/null | grep -q '^gdrive:'; then
 fi
 case "$MODE" in
   fix) echo "Does the trackpad work now? Remember the answer for the report." ;;
-  setup | undo) echo "Restart the laptop (sudo reboot) to finish, then run:  bash ~/erg-heart-coach/scripts/touchpad.sh check" ;;
+  setup) echo "Ctrl+Alt+P works now. A restart is only needed the first time setup is run (for the kernel setting)." ;;
+  undo) echo "Restart the laptop (sudo reboot) to finish, then run:  bash ~/erg-heart-coach/scripts/touchpad.sh check" ;;
 esac
