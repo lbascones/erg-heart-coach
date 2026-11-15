@@ -46,9 +46,16 @@ report() {
   lsusb 2>/dev/null | grep -iE 'bluetooth|atheros|qualcomm|broadcom|intel|realtek' || echo "(nothing obvious on USB)"
   rfkill list 2>&1
 
+  section "Kernel messages about Bluetooth (driver and firmware)"
+  (journalctl -k -b --no-pager 2>/dev/null || sudo dmesg 2>/dev/null) | grep -iE 'bluetooth|btusb|ath3k|hci' | tail -n 25
+
   section "Bluetooth service and adapter"
   systemctl is-active bluetooth 2>&1
-  bluetoothctl show 2>&1 | grep -E 'Controller|Name|Powered|Pairable|Discoverable' || echo "(no adapter found)"
+  bluetoothctl show 2>&1 | grep -E 'Controller|Name|Powered|Pairable|Discoverable|PowerState' || echo "(no adapter found)"
+
+  section "Fresh 15-second search (names of everything in range)"
+  bluetoothctl power on 2>&1
+  bluetoothctl --timeout 15 scan on 2>&1 | grep -E 'NEW|CHG.*Name' | head -n 40
 
   section "Known Bluetooth devices"
   bluetoothctl devices 2>&1
@@ -103,6 +110,10 @@ case "$MODE" in
     ;;
 esac
 
-report > "$REPORT" 2>&1
+report 2>&1 | tee "$REPORT"
 echo
 echo "Report saved to $REPORT"
+REMOTE=$(rclone listremotes 2>/dev/null | grep -m1 '^gdrive:' || rclone listremotes 2>/dev/null | head -n1)
+if [ -n "$REMOTE" ]; then
+  rclone copy "$REPORT" "${REMOTE}rowing-backups/diagnostics" && echo "Copied to Google Drive (rowing-backups/diagnostics)."
+fi
