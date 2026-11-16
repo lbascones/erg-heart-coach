@@ -2,3 +2,4 @@ node_modules/
 dist/
 public/lib/ergometer.js
 .playwright-mcp/
+HANDOFF.md
