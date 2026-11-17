@@ -12,6 +12,7 @@ import { drawForceCurves, drawSessionHr } from './charts';
 import { HeartRateTracker, ZONE_LABEL, type Zone } from './heartrate';
 import { remindersEnabled, scheduleReminder, sendTestNotification } from './notify';
 import { attachTooltips, renderProgress } from './progress';
+import { VideoPlayer } from './video';
 import { loadHistory, Session, updateSession, type Phase, type SessionSummary } from './session';
 import {
   ageOn,
@@ -82,6 +83,8 @@ const el = {
   coachStage: $('coach-stage'),
   coachPips: $('coach-pips'),
   coachClocks: $('coach-clocks'),
+  workoutBar: $('workout-bar'),
+  btnVideo: $('btn-video'),
   summaryHrChart: $<HTMLCanvasElement>('summary-hr-chart'),
   forceChart: $<HTMLCanvasElement>('force-chart'),
   banner: $('alert-banner'),
@@ -348,9 +351,9 @@ function guidance(zone: Zone, today: Today): [string, string] {
       return ['Ease back into your target.', `Back under ${s.targetHigh} bpm.`];
     }
     case 'cooldown': {
-      const aim = session.cooldownWatts ? `about ${session.cooldownWatts} W: light pressure, any comfortable rate` : 'light pressure, any comfortable rate';
+      const aim = session.cooldownWatts ? `about ${session.cooldownWatts} W with light pressure, any comfortable rate` : 'light pressure, any comfortable rate';
       if (session.dropSecondsLeft() !== null) {
-        return ['Workout done! Keep rowing easily.', `Steady at ${aim}: measuring your heart-rate drop.`];
+        return ['Workout done! Keep rowing easily.', `Steady at ${aim}. Measuring your heart-rate drop.`];
       }
       const drop = session.hrDropTo ? session.hrDropFrom - session.hrDropTo : null;
       return [
@@ -371,6 +374,10 @@ function renderCoach(now: number) {
   const inPhase = (now - session.phaseStartedAt) / 1000;
   let stage = '';
   const clocks: [label: string, value: number | string, main?: boolean][] = [];
+  // Video mode shows how far along the workout you are instead of minutes.
+  const pct = videoView ? workoutPercent(now) : null;
+  const left = (label: string, seconds: number, main?: boolean): [string, number | string, boolean?] =>
+    pct !== null ? ['Workout done', `${pct}%`, main] : [label, seconds, main];
 
   switch (phase) {
     case 'standby':
@@ -378,20 +385,22 @@ function renderCoach(now: number) {
       break;
     case 'warmup':
       stage = 'Warm-up';
-      clocks.push(['Warm-up left', clock.seconds, true]);
+      clocks.push(left('Warm-up left', clock.seconds, true));
       break;
     case 'main':
       if (piece) {
         stage = piece.hard ? `Hard piece ${piece.rep} of ${piece.reps}` : `Easy · after piece ${piece.rep} of ${piece.reps}`;
         clocks.push([piece.hard ? 'In this piece' : 'Easy so far', piece.secondsIn]);
         clocks.push([piece.hard ? (piece.last ? 'Cool-down in' : 'Easy in') : 'Next hard piece in', piece.secondsLeft, true]);
-        clocks.push(['Workout left', clock.seconds]);
+        clocks.push(left('Workout left', clock.seconds));
       } else if (session.plan.type === 'check') {
         stage = 'Fitness check';
-        clocks.push(['Workout so far', inPhase], ['Workout left', clock.seconds, true]);
+        if (pct === null) clocks.push(['Workout so far', inPhase]);
+        clocks.push(left('Workout left', clock.seconds, true));
       } else if (clock.countdown) {
         stage = 'Steady in your zone';
-        clocks.push(['Workout so far', inPhase], ['Workout left', clock.seconds, true]);
+        if (pct === null) clocks.push(['Workout so far', inPhase]);
+        clocks.push(left('Workout left', clock.seconds, true));
       } else {
         stage = 'Free row';
         clocks.push(['Rowing for', inPhase, true]);
@@ -412,6 +421,8 @@ function renderCoach(now: number) {
     }
   }
 
+  el.workoutBar.hidden = pct === null;
+  if (pct !== null) (el.workoutBar.firstElementChild as HTMLElement).style.width = `${pct}%`;
   el.coachStage.textContent = stage;
   el.coachStage.hidden = !stage;
   el.coach.classList.toggle('hard', !!piece?.hard);
@@ -487,6 +498,7 @@ function update() {
   // Standby is not rowing yet: no signal-loss alarm while walking to the rower (the over-limit alarm always works).
   const active = session.phase !== 'idle' && session.phase !== 'standby' && session.phase !== 'done';
   alarm.update(zone, active);
+  followSessionWithVideo(zone, active);
   if (zone === 'over') showBanner('over', `HEART RATE ${tracker.bpm}: EASE OFF`);
   else if (zone === 'nosignal' && active) showBanner('nosignal', 'NO HEART RATE SIGNAL');
   else if (zone === 'nosignal' && session.phase === 'standby') showBanner('waiting', 'Waiting for heart-rate signal…');
@@ -601,6 +613,7 @@ function fillForm(s: Settings) {
   f.sound.checked = s.sound;
   f.ntfyTopic.value = s.ntfyTopic;
   f.ntfyServer.value = s.ntfyServer;
+  f.videoPlaylists.value = s.videoPlaylists;
   formAge = ageOn(s.birthDate) ?? s.limitsFromAge;
   showFormAge(ageOn(s.birthDate));
 }
@@ -614,6 +627,7 @@ function readForm(): Settings {
     sound: f.sound.checked,
     ntfyTopic: f.ntfyTopic.value.trim(),
     ntfyServer: f.ntfyServer.value.trim(),
+    videoPlaylists: f.videoPlaylists.value.trim(),
   };
   for (const key of NUMBER_FIELDS) out[key] = Number(f[key].value);
   return out as Settings;
@@ -627,6 +641,7 @@ function applySettings(next: Settings) {
   session.setSettings(settings);
   alarm.enabled = settings.sound;
   layoutZoneBar();
+  if (videoView) void video.prepare(settings.videoPlaylists);
   void scheduleNextReminder();
   void backupNow();
 }
@@ -893,6 +908,77 @@ async function offerRestoreIfEmpty() {
     location.reload();
   }
 }
+
+// ---------- Video mode ----------
+// videoPref: what the Videos button last chose (remembered). videoView: what is on screen now; the
+// cool-down switches back to the dashboard for the heart-rate drop, the next session goes back to videos.
+const VIDEO_KEY = 'rowing.videoMode';
+let videoPref = false;
+try {
+  videoPref = localStorage.getItem(VIDEO_KEY) === '1';
+} catch {
+  /* per-browser convenience only */
+}
+let videoView = false;
+const video = new VideoPlayer($('video-host'), (msg) => ($('video-msg').textContent = msg));
+let videoPhase: Phase | null = null;
+
+function setVideoView(on: boolean) {
+  videoView = on;
+  document.documentElement.classList.toggle('video-mode', on);
+  el.btnVideo.classList.toggle('on', on);
+  el.btnVideo.textContent = on ? 'Dashboard' : 'Videos';
+  if (on) void video.prepare(settings.videoPlaylists);
+  if (on && session.rowingPhase) video.play();
+  // The force curve was hidden: redraw it at its size again.
+  if (!on) requestAnimationFrame(() => drawForceCurves(el.forceChart, curves));
+}
+
+el.btnVideo.addEventListener('click', () => {
+  videoPref = !videoView;
+  try {
+    localStorage.setItem(VIDEO_KEY, videoPref ? '1' : '0');
+  } catch {
+    /* ignore */
+  }
+  setVideoView(videoPref);
+  if (!videoPref) video.pause(); // switched off by hand: stop the music too
+});
+
+/** Percent of the planned session (warm-up + workout + cool-down) done, or null for open-ended rows. */
+function workoutPercent(now: number): number | null {
+  if (session.plan.mainMinutes === null || !session.rowingPhase) return null;
+  const warm = settings.warmupMinutes * 60;
+  const main = session.plan.mainMinutes * 60;
+  const cool = settings.cooldownMinutes * 60;
+  const total = warm + main + cool;
+  if (total <= 0) return null;
+  const before = session.phase === 'warmup' ? 0 : session.phase === 'main' ? warm : warm + main;
+  const length = session.phase === 'warmup' ? warm : session.phase === 'main' ? main : cool;
+  const done = before + length - session.phaseClock(now).seconds;
+  return Math.max(0, Math.min(100, Math.floor((done / total) * 100)));
+}
+
+/** Videos play while rowing; back to the dashboard for the cool-down; paused when the session ends. */
+function followSessionWithVideo(zone: Zone, active: boolean) {
+  const phase = session.phase;
+  if (phase !== videoPhase) {
+    const was = videoPhase;
+    videoPhase = phase;
+    if (phase === 'warmup' || (phase === 'main' && was !== 'warmup')) {
+      if (videoPref && !videoView) setVideoView(true);
+      if (videoView) video.play();
+    } else if (phase === 'cooldown') {
+      if (videoView) setVideoView(false); // music keeps playing
+    } else if (phase === 'done' || phase === 'idle') {
+      video.pause();
+    }
+  }
+  // Turn the video down while an alarm sounds.
+  video.duck(zone === 'over' || (zone === 'nosignal' && active));
+}
+
+setVideoView(videoPref);
 
 // ---------- Misc ----------
 $('btn-fullscreen').addEventListener('click', () => {

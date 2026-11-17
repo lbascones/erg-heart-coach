@@ -24,6 +24,8 @@ export interface Settings {
   ntfyServer: string;
   /** Hour of day (0-23) to send the reminder on rowing days. */
   reminderHour: number;
+  /** YouTube playlist links for video mode, one per line. */
+  videoPlaylists: string;
 }
 
 export type ZoneChoice = 'easy' | 'cardio';
@@ -106,6 +108,7 @@ export const DEFAULT_SETTINGS: Settings = {
   ntfyTopic: '',
   ntfyServer: 'https://ntfy.sh',
   reminderHour: 9,
+  videoPlaylists: '',
 };
 
 export function validate(s: Settings): string | null {

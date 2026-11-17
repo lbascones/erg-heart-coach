@@ -262,6 +262,18 @@ come out of the speaker, mixed with the music.
 
 `bash ~/erg-heart-coach/scripts/bluetooth-audio.sh` alone records a report in `~/rowing-backups/diagnostics`.
 
+## Videos
+
+The **Videos** button in the top bar switches the workout screen to a YouTube video in the upper-left, with the
+heart rate and rowing numbers on the right and the coach text below; **Dashboard** switches back. The choice is
+remembered. In video mode the workout clocks show how far along you are in percent (interval countdowns stay).
+
+- Paste YouTube playlist links in **Settings → Videos**, one per line. Each app start picks one and plays it
+  shuffled, with sound; videos that can't be played outside YouTube are skipped. Needs Wi-Fi; YouTube may show ads.
+- Videos start with the session and pause when it ends. At the cool-down the screen goes back to the dashboard for
+  the heart-rate drop (the music keeps playing); the next session starts in video mode again.
+- The video is turned down while the over-limit or no-signal alarm sounds.
+
 ## Diagnostics
 
 When something doesn't work with the monitor (no data, dropouts, odd numbers), record a diagnostics file:

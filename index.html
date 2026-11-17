@@ -15,6 +15,7 @@
       <div id="phase-name">Ready</div>
       <div class="top-actions">
         <button id="btn-diag-rec" class="ghost rec" hidden>● Recording</button>
+        <button id="btn-video" class="ghost" title="Switch between the dashboard and videos">Videos</button>
         <button id="btn-fullscreen" class="ghost" title="Full screen">⛶</button>
         <button id="btn-progress" class="ghost">Progress</button>
         <button id="btn-settings" class="ghost">Settings</button>
@@ -22,6 +23,11 @@
     </header>
 
     <main id="dash">
+      <section id="video-panel" class="panel">
+        <div id="video-host"></div>
+        <p id="video-msg"></p>
+      </section>
+
       <section id="hr-panel" class="panel">
         <div class="hr-row">
           <span id="hr-value">--</span><span class="hr-unit">bpm</span>
@@ -53,6 +59,7 @@
         </div>
         <div id="guide-text">Put on your heart-rate strap, then press Start.</div>
         <div id="guide-sub" class="guide-sub" hidden></div>
+        <div id="workout-bar" hidden><div></div></div>
         <div class="coach-foot">
           <div id="coach-clocks"></div>
           <div id="phase-actions"></div>
@@ -127,6 +134,13 @@
           <button type="button" id="btn-test-notify" class="small">Send test notification</button>
         </div>
         <p id="notify-status" class="fine-print" hidden></p>
+        <h2>Videos</h2>
+        <p class="fine-print">
+          For the <b>Videos</b> button at the top. Paste YouTube playlist links, one per line (open a playlist on
+          YouTube and copy the address; it contains <code>list=</code>). Each session picks one of them and plays it
+          shuffled, with sound. Videos that don't allow playing outside YouTube are skipped.
+        </p>
+        <textarea name="videoPlaylists" rows="3" spellcheck="false" placeholder="https://www.youtube.com/playlist?list=…"></textarea>
         <p id="settings-error" class="error" hidden></p>
         <div class="dialog-buttons">
           <button type="button" id="btn-test-sound" class="small">Test alarm sound</button>
