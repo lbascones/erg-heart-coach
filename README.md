@@ -30,9 +30,10 @@ npm run dev        # open http://localhost:5173
 - Session flow: standby → warm-up → workout → cool-down → summary (time in zones, HR drop, heart-rate graph of the
   whole session).
 - **Heart-rate drop:** HR at the end of the workout, and again after the first minute of the cool-down while you keep
-  rowing easily at the suggested cool-down effort (about half the workout's average watts, 18–20 strokes/min,
-  shown in the coach panel) (the way exercise tests measure it, so it compares with published values: 12 bpm or less is low,
-  15–25 typical, 30+ well trained). Interval sessions end right after the last hard piece. The progress chart shows
+  rowing easily at the suggested cool-down effort (about half the workout's average watts, shown in
+  the coach panel; reach it with light pressure on the drive, at whatever stroke rate feels comfortable). The method
+  follows exercise tests, but those start from a maximal effort, so their published values don't apply to these
+  moderate sessions: compare with your own earlier sessions. Interval sessions end right after the last hard piece. The progress chart shows
   steady sessions and fitness checks only, since interval days drop further.
   **Standby:** press Start at the laptop (no heart rate needed: the strap may be out of the receiver's range there),
   then get on the rower. A blue "Waiting for heart-rate signal" banner shows until the strap is picked up; the session

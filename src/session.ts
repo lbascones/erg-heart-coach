@@ -8,7 +8,7 @@ export type Phase = 'idle' | 'standby' | 'warmup' | 'main' | 'cooldown' | 'done'
 
 /**
  * Heart-rate drop: HR at the end of the workout, and again this long into the cool-down (still rowing easily).
- * This is how exercise tests measure heart-rate recovery, so the numbers compare with published values.
+ * Same method as exercise tests, but after moderate work the drop is smaller: compare with your own sessions, not published values.
  */
 export const HR_DROP_SECONDS = 60;
 /** Fitness check: only the last part of the main phase is scored, once HR has settled. */

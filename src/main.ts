@@ -348,7 +348,7 @@ function guidance(zone: Zone, today: Today): [string, string] {
       return ['Ease back into your target.', `Back under ${s.targetHigh} bpm.`];
     }
     case 'cooldown': {
-      const aim = session.cooldownWatts ? `about ${session.cooldownWatts} W, 18–20 strokes/min` : '18–20 strokes/min, light pressure';
+      const aim = session.cooldownWatts ? `about ${session.cooldownWatts} W: light pressure, any comfortable rate` : 'light pressure, any comfortable rate';
       if (session.dropSecondsLeft() !== null) {
         return ['Workout done! Keep rowing easily.', `Steady at ${aim}: measuring your heart-rate drop.`];
       }
