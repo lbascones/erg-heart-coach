@@ -272,8 +272,9 @@ song** (taps never open YouTube itself).
 
 - Paste YouTube playlist links in **Settings → Videos**, one per line. Each app start picks one and plays it
   shuffled, with sound; videos that can't be played outside YouTube are skipped. Needs Wi-Fi; YouTube may show ads.
-- Videos start with the session and pause when it ends. At the cool-down the screen goes back to the dashboard for
-  the heart-rate drop (the music keeps playing); the next session starts in video mode again.
+- Videos start with the session, keep playing through the cool-down, and pause when the session ends. When the
+  workout part is done, a "Workout done!" banner shows over the video for 10 s and the coach bar turns blue with
+  "Workout done · Cool-down"; the heart-rate drop is measured and shown in the progress box as usual.
 - The video is turned down while the over-limit or no-signal alarm sounds.
 
 ## Diagnostics

@@ -241,6 +241,14 @@ html.video-mode #video-panel { display: block; grid-area: video; position: relat
 }
 #video-msg:empty { display: none; }
 #video-tap { position: absolute; inset: 0; cursor: pointer; }
+#video-banner {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  padding: 18px 36px; border-radius: 18px; text-align: center; white-space: nowrap;
+  background: rgba(4, 18, 28, 0.85); border: 3px solid var(--accent); color: var(--text);
+  font-size: clamp(1.6rem, 5vh, 3rem); font-weight: 800; z-index: 1; pointer-events: none;
+}
+#video-banner small { display: block; font-size: 0.5em; font-weight: 600; color: var(--accent); margin-top: 4px; }
+#coach.cooldown { border-color: var(--accent); background: rgba(56, 189, 248, 0.10); }
 #video-tap-hint {
   position: absolute; right: 12px; bottom: 10px; padding: 4px 10px; border-radius: 8px;
   background: rgba(0, 0, 0, 0.55); color: var(--text-muted); font-size: 0.9rem;

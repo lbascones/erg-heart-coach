@@ -407,7 +407,7 @@ function renderCoach(now: number) {
       }
       break;
     case 'cooldown': {
-      stage = 'Cool-down';
+      stage = videoView ? 'Workout done · Cool-down' : 'Cool-down';
       const measuring = session.dropSecondsLeft(now);
       clocks.push(measuring !== null ? ['Measuring', measuring, true] : ['Cool-down left', clock.seconds, true]);
       if (session.cooldownWatts) clocks.push(['Aim for', `${session.cooldownWatts} W`]);
@@ -432,6 +432,7 @@ function renderCoach(now: number) {
   el.coachStage.hidden = !stage;
   el.coach.classList.toggle('hard', !!piece?.hard);
   el.coach.classList.toggle('easy-piece', !!piece && !piece.hard);
+  el.coach.classList.toggle('cooldown', phase === 'cooldown');
 
   const pips = piece
     ? Array.from({ length: piece.reps }, (_, i) => {
@@ -915,8 +916,7 @@ async function offerRestoreIfEmpty() {
 }
 
 // ---------- Video mode ----------
-// videoPref: what the Videos button last chose (remembered). videoView: what is on screen now; the
-// cool-down switches back to the dashboard for the heart-rate drop, the next session goes back to videos.
+// videoPref: what the Videos button last chose (remembered). videoView: what is on screen now.
 const VIDEO_KEY = 'rowing.videoMode';
 let videoPref = false;
 try {
@@ -989,7 +989,16 @@ function workoutPercent(now: number): number | null {
   return Math.max(0, Math.min(100, Math.floor((done / total) * 100)));
 }
 
-/** Videos play while rowing; back to the dashboard for the cool-down; paused when the session ends. */
+const videoBanner = $('video-banner');
+let videoBannerTimer = 0;
+function showVideoBanner(title: string, sub: string, ms: number) {
+  videoBanner.innerHTML = `${title}<small>${sub}</small>`;
+  videoBanner.hidden = false;
+  clearTimeout(videoBannerTimer);
+  videoBannerTimer = window.setTimeout(() => (videoBanner.hidden = true), ms);
+}
+
+/** Videos play from the start of the session through the cool-down, and pause when it ends. */
 function followSessionWithVideo(zone: Zone, active: boolean) {
   const phase = session.phase;
   if (phase !== videoPhase) {
@@ -999,7 +1008,7 @@ function followSessionWithVideo(zone: Zone, active: boolean) {
       if (videoPref && !videoView) setVideoView(true);
       if (videoView) video.play();
     } else if (phase === 'cooldown') {
-      if (videoView) setVideoView(false); // music keeps playing
+      if (videoView) showVideoBanner('Workout done!', 'Cool-down: keep rowing easily', 10_000);
     } else if (phase === 'done' || phase === 'idle') {
       video.pause();
     }

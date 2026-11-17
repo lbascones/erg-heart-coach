@@ -89,9 +89,18 @@ export class VideoPlayer {
           if (e.data === CUED || e.data === PLAYING) this.shuffle();
         },
         // Video removed, private or not allowed outside YouTube: skip it.
-        onError: () => this.player?.nextVideo?.(),
+        onError: (e: any) => {
+          console.info('video error', e?.data, 'skipping');
+          this.skipSoon();
+        },
       },
     });
+  }
+
+  private skipTimer = 0;
+  private skipSoon() {
+    clearTimeout(this.skipTimer);
+    this.skipTimer = window.setTimeout(() => this.player?.nextVideo?.(), 800);
   }
 
   /** Shuffle once the playlist is known, so every session starts somewhere new. */
