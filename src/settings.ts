@@ -108,7 +108,8 @@ export const DEFAULT_SETTINGS: Settings = {
   ntfyTopic: '',
   ntfyServer: 'https://ntfy.sh',
   reminderHour: 9,
-  videoPlaylists: '',
+  // "CLASSIC ROCK, Hard Rock, Live Music Videos" (YouTube, ~630 videos), chosen by the user.
+  videoPlaylists: 'https://www.youtube.com/playlist?list=PL300C32DA374417AA',
 };
 
 export function validate(s: Settings): string | null {
