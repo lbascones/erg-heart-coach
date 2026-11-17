@@ -222,24 +222,17 @@ button.huge { font-size: 2rem; padding: 0.6em 1.6em; border-radius: 16px; }
 #phase-actions { display: flex; gap: 10px; flex-shrink: 0; }
 
 /* ---------- Video mode (toggled by the Videos button; the dashboard layout above stays as is) ---------- */
-#video-panel, #workout-bar { display: none; }
+#video-panel, #workout-bar, #video-progress { display: none; }
 html.video-mode #dash {
-  /* Video in the upper-left; numbers on the right; coach text below the video. */
-  grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr);
+  /* Video upper-left; right: heart rate (2/3) over workout progress (1/3); coach text along the bottom. */
+  grid-template-columns: minmax(0, 2.6fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 2fr) minmax(0, 1fr) auto;
   grid-template-areas:
     'video hr'
-    'coach metrics';
+    'video progress'
+    'coach coach';
 }
-html.video-mode #video-panel {
-  display: block;
-  grid-area: video;
-  position: relative;
-  aspect-ratio: 16 / 9;
-  max-height: calc(100vh - 56px - 16px - 14px - 235px); /* leaves room for the coach text */
-  overflow: hidden;
-  background: #000;
-}
+html.video-mode #video-panel { display: block; grid-area: video; position: relative; overflow: hidden; background: #000; }
 #video-host, #video-host iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 #video-msg {
   position: absolute; inset: 0; margin: 0;
@@ -247,20 +240,27 @@ html.video-mode #video-panel {
   color: var(--text-muted); font-size: 1.3rem; pointer-events: none;
 }
 #video-msg:empty { display: none; }
-html.video-mode #force-panel { display: none; }
+html.video-mode #force-panel, html.video-mode #metrics { display: none; }
 html.video-mode #hr-panel { padding: 8px 12px; }
 html.video-mode #hr-value { font-size: clamp(4rem, 13vh, 9rem); }
-html.video-mode #metrics { grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(2, 1fr); }
-html.video-mode #metrics .metric:nth-child(n + 5) { display: none; } /* pace, watts, strokes, distance */
-html.video-mode .m-value { font-size: clamp(1.6rem, 5vh, 3.2rem); }
-html.video-mode #coach { padding: 10px 18px; gap: 6px; }
-html.video-mode #guide-text { font-size: clamp(1.4rem, 4.2vh, 2.8rem); margin-top: 0; }
-html.video-mode .guide-sub { font-size: clamp(1rem, 2.6vh, 1.6rem); }
-html.video-mode .clock-value { font-size: clamp(1.6rem, 5vh, 3.2rem); }
+html.video-mode #video-progress {
+  grid-area: progress;
+  display: flex; flex-direction: column; justify-content: center; gap: 12px;
+  padding: 10px 16px; min-height: 0;
+}
+#video-progress #coach-clocks { flex-wrap: wrap; justify-content: space-around; gap: 6px 18px; }
+#video-progress .clock { text-align: center; }
+#video-progress .clock .m-label { font-size: 0.8rem; }
+#video-progress .clock-value { font-size: clamp(1.5rem, 5vh, 3rem); }
 html.video-mode #workout-bar:not([hidden]) {
   display: block; height: 10px; border-radius: 5px; background: rgba(255, 255, 255, 0.12); overflow: hidden;
 }
 #workout-bar div { height: 100%; width: 0; background: var(--accent); transition: width 1s linear; }
+html.video-mode #coach { padding: 10px 18px; gap: 4px; min-height: 150px; }
+html.video-mode #guide-text { font-size: clamp(1.4rem, 4.2vh, 2.8rem); margin-top: 0; }
+html.video-mode .guide-sub { font-size: clamp(1rem, 2.6vh, 1.6rem); }
+html.video-mode .coach-foot { margin-top: 0; position: absolute; right: 18px; bottom: 12px; }
+html.video-mode #coach { position: relative; padding-right: 380px; }
 #btn-video.on { background: rgba(255, 255, 255, 0.16); }
 dialog textarea { width: 100%; font-size: 1rem; resize: vertical; }
 

@@ -923,8 +923,17 @@ let videoView = false;
 const video = new VideoPlayer($('video-host'), (msg) => ($('video-msg').textContent = msg));
 let videoPhase: Phase | null = null;
 
+// In video mode the workout clocks and progress bar move to their own box under the heart rate.
+const clocksHome = { parent: el.coachClocks.parentElement!, next: el.coachClocks.nextSibling };
+const barHome = { parent: el.workoutBar.parentElement!, next: el.workoutBar.nextSibling };
+
 function setVideoView(on: boolean) {
   videoView = on;
+  if (on) $('video-progress').append(el.workoutBar, el.coachClocks);
+  else {
+    clocksHome.parent.insertBefore(el.coachClocks, clocksHome.next);
+    barHome.parent.insertBefore(el.workoutBar, barHome.next);
+  }
   document.documentElement.classList.toggle('video-mode', on);
   el.btnVideo.classList.toggle('on', on);
   el.btnVideo.textContent = on ? 'Dashboard' : 'Videos';
