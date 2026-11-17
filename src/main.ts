@@ -421,6 +421,11 @@ function renderCoach(now: number) {
     }
   }
 
+  // Video mode has no rowing-numbers panel, but watts matter for pacing (especially on interval days).
+  if (videoView && session.rowingPhase) {
+    const fresh = lastSample && now - lastSample.time < 5000 ? lastSample : null;
+    clocks.push(['Watts', fresh?.power ? String(fresh.power) : '--']);
+  }
   el.workoutBar.hidden = pct === null;
   if (pct !== null) (el.workoutBar.firstElementChild as HTMLElement).style.width = `${pct}%`;
   el.coachStage.textContent = stage;
@@ -929,7 +934,10 @@ const barHome = { parent: el.workoutBar.parentElement!, next: el.workoutBar.next
 
 function setVideoView(on: boolean) {
   videoView = on;
-  if (on) $('video-progress').append(el.workoutBar, el.coachClocks);
+  if (on) {
+    $('video-progress').append(el.workoutBar, el.coachClocks);
+    flashTapHint('Tap the video for the next song');
+  }
   else {
     clocksHome.parent.insertBefore(el.coachClocks, clocksHome.next);
     barHome.parent.insertBefore(el.workoutBar, barHome.next);
@@ -952,6 +960,19 @@ el.btnVideo.addEventListener('click', () => {
   }
   setVideoView(videoPref);
   if (!videoPref) video.pause(); // switched off by hand: stop the music too
+});
+
+const videoTap = $('video-tap');
+let tapHintTimer = 0;
+function flashTapHint(text: string) {
+  $('video-tap-hint').textContent = text;
+  videoTap.classList.add('show-hint');
+  clearTimeout(tapHintTimer);
+  tapHintTimer = window.setTimeout(() => videoTap.classList.remove('show-hint'), 4000);
+}
+videoTap.addEventListener('click', () => {
+  video.next();
+  flashTapHint('Next song…');
 });
 
 /** Percent of the planned session (warm-up + workout + cool-down) done, or null for open-ended rows. */

@@ -266,7 +266,8 @@ come out of the speaker, mixed with the music.
 
 The **Videos** button in the top bar switches the workout screen to a YouTube video in the upper-left. On the right,
 the heart rate takes the top two thirds and workout progress the bottom third (percent done, a progress bar, and
-the interval countdowns); the coach text runs along the bottom. Pace, watts, strokes and distance are left out.
+the interval countdowns, and watts); the coach text runs along the bottom. **Tap the video to skip to the next
+song** (taps never open YouTube itself).
 **Dashboard** switches back; the choice is remembered.
 
 - Paste YouTube playlist links in **Settings → Videos**, one per line. Each app start picks one and plays it

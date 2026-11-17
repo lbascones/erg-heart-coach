@@ -240,6 +240,13 @@ html.video-mode #video-panel { display: block; grid-area: video; position: relat
   color: var(--text-muted); font-size: 1.3rem; pointer-events: none;
 }
 #video-msg:empty { display: none; }
+#video-tap { position: absolute; inset: 0; cursor: pointer; }
+#video-tap-hint {
+  position: absolute; right: 12px; bottom: 10px; padding: 4px 10px; border-radius: 8px;
+  background: rgba(0, 0, 0, 0.55); color: var(--text-muted); font-size: 0.9rem;
+  opacity: 0; transition: opacity 0.4s;
+}
+#video-tap.show-hint #video-tap-hint { opacity: 1; }
 html.video-mode #force-panel, html.video-mode #metrics { display: none; }
 html.video-mode #hr-panel { padding: 8px 12px; }
 html.video-mode #hr-value { font-size: clamp(4rem, 13vh, 9rem); }

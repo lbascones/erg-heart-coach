@@ -110,8 +110,16 @@ export class VideoPlayer {
       this.started = true;
       this.player.playVideoAt(0); // first video of the shuffled order
     } else {
+      this.started = true;
       this.player.playVideo();
     }
+  }
+
+  /** Skip to the next video (or start playing, if nothing has played yet). */
+  next() {
+    if (!this.player?.nextVideo) return;
+    if (!this.started) this.play();
+    else this.player.nextVideo();
   }
 
   pause() {
