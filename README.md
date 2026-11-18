@@ -75,6 +75,8 @@ Install the free ntfy app, subscribe to a hard-to-guess topic (e.g. `row-k7f2q9`
 After each session (and whenever the app starts) the next rowing day's reminder is scheduled on the ntfy server,
 so it arrives even while the laptop is off. ntfy.sh holds messages up to 3 days ahead.
 Reminder text is generic (no name or health data), but it does pass through the ntfy server.
+If booking fails, the app tries again after 30 seconds and after another minute. If all three tries fail, it shows a
+message on screen and saves the details in `~/rowing-backups/diagnostics` (copied to Google Drive).
 
 ## Code map
 

@@ -588,12 +588,28 @@ async function scheduleNextReminder() {
       : today.kind === 'row' && today.plan.type === 'intervals'
         ? `Interval day: ${today.plan.mainMinutes} minutes of harder pieces with easy rowing between, plus warm-up and cool-down.`
         : `Rowing day: ${lvl.mainMin} minutes in your zone, plus warm-up and cool-down.`;
-  try {
-    await scheduleReminder(settings, when, msg);
-  } catch (err) {
-    console.warn('Could not schedule reminder', err);
-  }
+  const result = await scheduleReminder(settings, when, msg);
+  if (result.status === 'scheduled') reminderNotice.hidden = true;
+  if (result.status !== 'failed') return;
+  const saved = await saveDiagnostics({
+    app: 'erg-heart-coach-diagnostics',
+    version: 1,
+    kind: 'reminder-booking-failed',
+    savedAt: new Date().toISOString(),
+    reminderFor: when.toISOString(),
+    ntfyServer: settings.ntfyServer,
+    attempts: result.attempts,
+  });
+  const whenText = when.toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+  reminderNoticeText.textContent =
+    'file' in saved
+      ? `The phone reminder for ${whenText} could not be booked (3 tries). Details: ${saved.file} in Google Drive → rowing-backups/diagnostics.`
+      : `The phone reminder for ${whenText} could not be booked (3 tries). Details were downloaded as ${saved.downloaded} (${saved.reason}).`;
+  reminderNotice.hidden = false;
 }
+const reminderNotice = $('reminder-notice');
+const reminderNoticeText = $('reminder-notice-text');
+$('btn-reminder-notice').addEventListener('click', () => (reminderNotice.hidden = true));
 
 // ---------- Settings ----------
 const NUMBER_FIELDS = ['maxHr', 'targetLow', 'targetHigh', 'ceiling', 'warmupMinutes', 'cooldownMinutes', 'reminderHour'];
