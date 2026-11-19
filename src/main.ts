@@ -373,11 +373,9 @@ function renderCoach(now: number) {
   const clock = session.phaseClock(now);
   const inPhase = (now - session.phaseStartedAt) / 1000;
   let stage = '';
-  const clocks: [label: string, value: number | string, main?: boolean][] = [];
-  // Video mode shows how far along the workout you are instead of minutes.
-  const pct = videoView ? workoutPercent(now) : null;
-  const left = (label: string, seconds: number, main?: boolean): [string, number | string, boolean?] =>
-    pct !== null ? ['Workout done', `${pct}%`, main] : [label, seconds, main];
+  type Clock = [label: string, value: number | string, main?: boolean, cls?: string];
+  let clocks: Clock[] = [];
+  const left = (label: string, seconds: number, main?: boolean): Clock => [label, seconds, main];
 
   switch (phase) {
     case 'standby':
@@ -395,11 +393,11 @@ function renderCoach(now: number) {
         clocks.push(left('Workout left', clock.seconds));
       } else if (session.plan.type === 'check') {
         stage = 'Fitness check';
-        if (pct === null) clocks.push(['Workout so far', inPhase]);
+        clocks.push(['Workout so far', inPhase]);
         clocks.push(left('Workout left', clock.seconds, true));
       } else if (clock.countdown) {
         stage = 'Steady in your zone';
-        if (pct === null) clocks.push(['Workout so far', inPhase]);
+        clocks.push(['Workout so far', inPhase]);
         clocks.push(left('Workout left', clock.seconds, true));
       } else {
         stage = 'Free row';
@@ -421,13 +419,33 @@ function renderCoach(now: number) {
     }
   }
 
+  // Video mode: % through the current colored stretch and the time to the next one replace the minute clocks.
   // Video mode has no rowing-numbers panel, but watts matter for pacing (especially on interval days).
-  if (videoView && session.rowingPhase) {
-    const fresh = lastSample && now - lastSample.time < 5000 ? lastSample : null;
-    clocks.push(['Watts', fresh?.power ? String(fresh.power) : '--']);
+  const fresh = lastSample && now - lastSample.time < 5000 ? lastSample : null;
+  const watts: Clock = ['Watts', fresh?.power ? String(fresh.power) : '--'];
+  const pos = videoView ? workoutPosition(now) : null;
+  if (pos) {
+    const head: Clock[] = [
+      [pos.seg.label, `${pos.pct}%`, false, `seg-${pos.seg.kind}`],
+      [pos.nextLabel, pos.left, true, pos.nextKind ? `seg-${pos.nextKind}` : ''],
+    ];
+    if (phase === 'cooldown') {
+      // Cells, 3 across: % | countdown | measuring (or empty), then Watts Aimed | Watts | heart-rate drop,
+      // so the suggested and actual watts sit side by side.
+      const find = (test: (label: string) => boolean) => clocks.find(([label]) => test(label));
+      const measuring = find((l) => l === 'Measuring');
+      const aim = find((l) => l === 'Aim for');
+      const drop = find((l) => l.startsWith('Drop from') || l === 'HR drop, 1st min');
+      head.push(measuring ?? ['', '']);
+      const aimed: Clock = aim ? ['Watts Aimed', String(session.cooldownWatts)] : ['', ''];
+      clocks = [...head, aimed, watts, ...(drop ? [drop] : [])];
+    } else {
+      clocks = [...head, watts];
+    }
+  } else if (videoView && session.rowingPhase) {
+    clocks.push(watts);
   }
-  el.workoutBar.hidden = pct === null;
-  if (pct !== null) (el.workoutBar.firstElementChild as HTMLElement).style.width = `${pct}%`;
+  renderWorkoutBar(pos);
   el.coachStage.textContent = stage;
   el.coachStage.hidden = !stage;
   el.coach.classList.toggle('hard', !!piece?.hard);
@@ -445,8 +463,8 @@ function renderCoach(now: number) {
 
   const html = clocks
     .map(
-      ([label, v, main]) =>
-        `<div class="clock${main ? ' main' : ''}"><div class="m-label">${label}</div>` +
+      ([label, v, main, cls]) =>
+        `<div class="clock${main ? ' main' : ''}${cls ? ` ${cls}` : ''}"><div class="m-label">${label}</div>` +
         `<div class="clock-value">${typeof v === 'number' ? fmtTime(v) : v}</div></div>`,
     )
     .join('');
@@ -992,17 +1010,95 @@ videoTap.addEventListener('click', () => {
 });
 
 /** Percent of the planned session (warm-up + workout + cool-down) done, or null for open-ended rows. */
-function workoutPercent(now: number): number | null {
-  if (session.plan.mainMinutes === null || !session.rowingPhase) return null;
+/** One colored stretch of the workout bar in video mode. */
+type SegKind = 'warm' | 'steady' | 'hard' | 'easy' | 'cool';
+interface Segment {
+  kind: SegKind;
+  sec: number;
+  label: string;
+}
+
+/** The planned workout as colored stretches: warm-up, steady or interval pieces, cool-down. Null for a free row. */
+function workoutSegments(): Segment[] | null {
+  if (session.plan.mainMinutes === null) return null;
+  const segs: Segment[] = [];
   const warm = settings.warmupMinutes * 60;
-  const main = session.plan.mainMinutes * 60;
   const cool = settings.cooldownMinutes * 60;
-  const total = warm + main + cool;
-  if (total <= 0) return null;
+  if (warm > 0) segs.push({ kind: 'warm', sec: warm, label: 'Warm-up' });
+  const iv = session.plan.intervals;
+  if (iv) {
+    for (let r = 1; r <= iv.reps; r++) {
+      segs.push({ kind: 'hard', sec: iv.workSec, label: `Hard ${r} of ${iv.reps}` });
+      if (r < iv.reps) segs.push({ kind: 'easy', sec: iv.easySec, label: 'Easy' });
+    }
+  } else {
+    const label = session.plan.type === 'check' ? 'Fitness check' : 'Steady';
+    segs.push({ kind: 'steady', sec: session.plan.mainMinutes * 60, label });
+  }
+  if (cool > 0) segs.push({ kind: 'cool', sec: cool, label: 'Cool-down' });
+  return segs;
+}
+
+/** Seconds into the planned workout, counted from the phase clock so it always matches the phase. */
+function workoutElapsed(now: number): number {
+  const warm = settings.warmupMinutes * 60;
+  const main = (session.plan.mainMinutes ?? 0) * 60;
+  const cool = settings.cooldownMinutes * 60;
   const before = session.phase === 'warmup' ? 0 : session.phase === 'main' ? warm : warm + main;
   const length = session.phase === 'warmup' ? warm : session.phase === 'main' ? main : cool;
-  const done = before + length - session.phaseClock(now).seconds;
-  return Math.max(0, Math.min(100, Math.floor((done / total) * 100)));
+  return before + Math.max(0, length - session.phaseClock(now).seconds);
+}
+
+const NEXT_LABEL: Record<SegKind, string> = {
+  warm: 'Warm-up in',
+  steady: 'Steady in',
+  hard: 'Hard in',
+  easy: 'Easy in',
+  cool: 'Cool-down in',
+};
+
+/** Where you are on the bar: the current stretch, % through it, and time until the next change. */
+function workoutPosition(now: number) {
+  const segs = workoutSegments();
+  if (!segs || !session.rowingPhase) return null;
+  const total = segs.reduce((n, sg) => n + sg.sec, 0);
+  if (total <= 0) return null;
+  const elapsed = Math.min(total, workoutElapsed(now));
+  let start = 0;
+  let i = 0;
+  while (i < segs.length - 1 && elapsed >= start + segs[i].sec) start += segs[i++].sec;
+  const seg = segs[i];
+  const next = segs[i + 1];
+  return {
+    segs,
+    total,
+    elapsed,
+    seg,
+    pct: Math.max(0, Math.min(100, Math.floor(((elapsed - start) / seg.sec) * 100))),
+    left: Math.max(0, start + seg.sec - elapsed),
+    nextLabel: next ? NEXT_LABEL[next.kind] : 'Done in',
+    nextKind: next?.kind ?? null,
+  };
+}
+
+/** Draws the colored stretches once per workout, then moves the dot and darkens what is behind it. */
+let barKey = '';
+function renderWorkoutBar(pos: ReturnType<typeof workoutPosition>) {
+  el.workoutBar.hidden = pos === null;
+  if (!pos) return;
+  const key = pos.segs.map((sg) => `${sg.kind}${sg.sec}`).join(',');
+  if (key !== barKey) {
+    barKey = key;
+    el.workoutBar.innerHTML =
+      '<div class="wb-track">' +
+      pos.segs.map((sg) => `<span class="wb-seg seg-${sg.kind}" style="flex-grow:${sg.sec}"></span>`).join('') +
+      '<div class="wb-past"></div></div><div class="wb-dot"></div>';
+  }
+  const at = `${(pos.elapsed / pos.total) * 100}%`;
+  (el.workoutBar.querySelector('.wb-past') as HTMLElement).style.width = at;
+  const dot = el.workoutBar.querySelector('.wb-dot') as HTMLElement;
+  dot.style.left = at;
+  dot.className = `wb-dot seg-${pos.seg.kind}`;
 }
 
 const videoBanner = $('video-banner');
