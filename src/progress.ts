@@ -1,5 +1,6 @@
 import { loadHistory, type SessionSummary } from './session';
 import { dayNumber, dayToDate, GOOD_TO_LEVEL_UP, levelInfo, LEVELS, type TrainerState } from './trainer';
+import { loadMobility, ROUTINE, secFor } from './mobility';
 
 /** A plotted point plus the text its tooltip shows. */
 interface Point {
@@ -38,7 +39,15 @@ function emptyState(canvas: HTMLCanvasElement, text: string) {
   ctx.font = '16px system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(text, w / 2, h / 2);
+  // Wrap to the chart's width, centered as a block.
+  const lines: string[] = [];
+  for (const word of text.split(' ')) {
+    const cur = lines.at(-1);
+    if (cur !== undefined && ctx.measureText(`${cur} ${word}`).width <= w - 24) lines[lines.length - 1] = `${cur} ${word}`;
+    else lines.push(word);
+  }
+  const lh = 22;
+  lines.forEach((l, i) => ctx.fillText(l, w / 2, h / 2 + (i - (lines.length - 1) / 2) * lh));
 }
 
 /** "Nice" axis bounds and ticks so labels are round numbers. */
@@ -57,12 +66,15 @@ function niceScale(min: number, max: number, ticks = 4) {
   return { lo, hi, ticks: out };
 }
 
-/** One series over time: 2px line, 8px markers, light grid, date labels, hover tooltips. */
-function lineChart(canvas: HTMLCanvasElement, pts: Point[], empty: string, zeroBased = false) {
+/**
+ * One series over time (or two, e.g. left and right): 2px lines, 8px markers, light grid, date labels,
+ * hover tooltips. The second series is drawn in orange.
+ */
+function lineChart(canvas: HTMLCanvasElement, pts: Point[], empty: string, zeroBased = false, second: Point[] = []) {
   if (pts.length === 0) return emptyState(canvas, empty);
   const { ctx, w, h } = prepare(canvas);
   const padL = 44, padR = 16, padT = 12, padB = 26;
-  const vs = pts.map((p) => p.v);
+  const vs = [...pts, ...second].map((p) => p.v);
   const { lo, hi, ticks } = niceScale(zeroBased ? 0 : Math.min(...vs) * 0.9, Math.max(...vs) * 1.05);
   const t0 = pts[0].t;
   const t1 = pts[pts.length - 1].t;
@@ -91,34 +103,41 @@ function lineChart(canvas: HTMLCanvasElement, pts: Point[], empty: string, zeroB
     ctx.fillText(fmtDate(pts[i].t), x(pts[i].t), h - padB + 8);
   });
 
-  // Line.
-  const accent = css('--accent');
-  ctx.strokeStyle = accent;
-  ctx.lineWidth = 2;
-  ctx.lineJoin = 'round';
-  ctx.beginPath();
-  pts.forEach((p, i) => (i ? ctx.lineTo(x(p.t), y(p.v)) : ctx.moveTo(x(p.t), y(p.v))));
-  ctx.stroke();
-
-  // Markers with a surface ring, and remember them for hover.
+  // Lines, then markers with a surface ring (remembered for hover), then a label on each latest value.
   const list: Hit[] = [];
-  for (const p of pts) {
-    ctx.beginPath();
-    ctx.arc(x(p.t), y(p.v), 4, 0, Math.PI * 2);
-    ctx.fillStyle = accent;
-    ctx.fill();
+  const series: [Point[], string][] = [[pts, css('--accent')]];
+  if (second.length) series.push([second, css('--high')]);
+  for (const [sp, color] of series) {
+    ctx.strokeStyle = color;
     ctx.lineWidth = 2;
-    ctx.strokeStyle = '#151a21';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    sp.forEach((p, i) => (i ? ctx.lineTo(x(p.t), y(p.v)) : ctx.moveTo(x(p.t), y(p.v))));
     ctx.stroke();
-    list.push({ x: x(p.t), y: y(p.v), tip: p.tip });
+    for (const p of sp) {
+      ctx.beginPath();
+      ctx.arc(x(p.t), y(p.v), 4, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#151a21';
+      ctx.stroke();
+      list.push({ x: x(p.t), y: y(p.v), tip: p.tip });
+    }
   }
-  // Direct label on the latest value only.
-  const last = pts[pts.length - 1];
   ctx.fillStyle = css('--text');
   ctx.textAlign = 'right';
   ctx.textBaseline = 'bottom';
   ctx.font = '600 14px system-ui, sans-serif';
-  ctx.fillText(String(Math.round(last.v)), Math.min(w - padR, x(last.t) + 4), y(last.v) - 8);
+  // Latest values; when two are close, the lower one goes under its marker so they do not overlap.
+  const lasts = series.map(([sp]) => sp[sp.length - 1]);
+  const close = lasts.length === 2 && Math.abs(y(lasts[0].v) - y(lasts[1].v)) < 18;
+  lasts.forEach((last) => {
+    const below = close && y(last.v) >= Math.max(...lasts.map((l) => y(l.v)));
+    ctx.textBaseline = below ? 'top' : 'bottom';
+    const v = Math.round(last.v * 4) / 4;
+    ctx.fillText(String(v), Math.min(w - padR, x(last.t) + 4), y(last.v) + (below ? 8 : -8));
+  });
   hits.set(canvas, list);
 }
 
@@ -224,6 +243,7 @@ export interface ProgressEls {
   target: HTMLCanvasElement;
   recovery: HTMLCanvasElement;
   weekly: HTMLCanvasElement;
+  knee: HTMLCanvasElement;
 }
 
 export function renderProgress(els: ProgressEls, trainer: TrainerState) {
@@ -242,6 +262,9 @@ export function renderProgress(els: ProgressEls, trainer: TrainerState) {
   }
 
   const totalKm = history.reduce((a, s) => a + s.distance, 0) / 1000;
+  const mob = loadMobility();
+  const holds = ROUTINE.filter((e) => e.how === 'Hold').map((e) => secFor(e, mob));
+  const holdText = Math.min(...holds) === Math.max(...holds) ? `${holds[0]} s` : `${Math.min(...holds)}–${Math.max(...holds)} s`;
   // Steady sessions and fitness checks only: interval days end on a hard piece and drop further, which would blur the trend.
   const recoveries = history.filter((x) => (x.type === 'planned' || x.type === 'check') && hasDrop(x));
   const lastRec = recoveries.at(-1);
@@ -257,6 +280,7 @@ export function renderProgress(els: ProgressEls, trainer: TrainerState) {
     tile('This week', `${Math.round(weeks.at(-1)!.minutes)} min`, `goal ${lvl.perWeek * lvl.mainMin} min`),
     tile('Sessions', String(history.length), `${totalKm.toFixed(1)} km total`),
     tile('HR drop', lastRec ? `${lastRec.hrDropFrom! - lastRec.hrDropTo!}` : '--', 'bpm in 1st min of cool-down, latest'),
+    tile('Mobility', String(mob.completed.length), `routines · holds ${holdText}`),
   ].join('');
 
   const checks = history.filter((s) => s.type === 'check' && s.checkWatts);
@@ -282,6 +306,13 @@ export function renderProgress(els: ProgressEls, trainer: TrainerState) {
     })),
     'Appears after a steady session with a full first minute of cool-down',
     true,
+  );
+  lineChart(
+    els.knee,
+    mob.kneeWall.map((m) => ({ t: m.t, v: m.left, tip: `${fmtDate(m.t)}: left ${m.left} in` })),
+    'Measure at the end of a mobility routine (about once a month)',
+    true,
+    mob.kneeWall.map((m) => ({ t: m.t, v: m.right, tip: `${fmtDate(m.t)}: right ${m.right} in` })),
   );
   weeklyChart(
     els.weekly,

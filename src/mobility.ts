@@ -7,6 +7,58 @@
 
 type P = [number, number];
 
+// ---------- Progress, kept in localStorage and in the backups ----------
+export const MOBILITY_KEY = 'rowing.mobility.v1';
+
+export interface KneeWall {
+  t: number;
+  /** Inches from the wall to the big toe when the knee just touches the wall, heel down. */
+  left: number;
+  right: number;
+}
+
+export interface MobilityState {
+  /** When each counted routine was finished (at most one per day). */
+  completed: number[];
+  kneeWall: KneeWall[];
+}
+
+export function loadMobility(): MobilityState {
+  try {
+    const s = JSON.parse(localStorage.getItem(MOBILITY_KEY) ?? 'null');
+    if (s && Array.isArray(s.completed) && Array.isArray(s.kneeWall)) return s;
+  } catch {
+    /* fall through */
+  }
+  return { completed: [], kneeWall: [] };
+}
+
+function saveMobility(s: MobilityState) {
+  try {
+    localStorage.setItem(MOBILITY_KEY, JSON.stringify(s));
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Holds start at each exercise's base time and get 5 s longer every 3 counted routines (about a week), up to 60 s. */
+const HOLD_STEP_SEC = 5;
+const ROUTINES_PER_STEP = 3;
+const HOLD_MAX_SEC = 60;
+export function holdBonus(s: MobilityState = loadMobility()): number {
+  return HOLD_STEP_SEC * Math.floor(s.completed.length / ROUTINES_PER_STEP);
+}
+
+/** A knee-to-wall measurement is suggested when none was taken in this many days. */
+const MEASURE_EVERY_DAYS = 28;
+export function measureDue(s: MobilityState = loadMobility(), now = Date.now()): boolean {
+  const last = s.kneeWall.at(-1);
+  return !last || now - last.t >= MEASURE_EVERY_DAYS * 86_400_000;
+}
+
+const DAY_MS = 86_400_000;
+const sameDay = (a: number, b: number) => new Date(a).toDateString() === new Date(b).toDateString();
+
 const pt = ([x, y]: P) => `${x},${y}`;
 /** Polyline path through the points. */
 const L = (...pts: P[]) => `M${pts.map(pt).join(' L')}`;
@@ -346,6 +398,11 @@ export function sketchHtml(ex: Exercise, mirror = false): string {
     .join('');
 }
 
+/** Seconds for an exercise today: holds include the progression, reps stay as planned. */
+export function secFor(ex: Exercise, s: MobilityState = loadMobility()): number {
+  return ex.how === 'Hold' ? Math.min(HOLD_MAX_SEC, Math.max(ex.sec, ex.sec + holdBonus(s))) : ex.sec;
+}
+
 /** One timed step: an exercise, on one side or both. */
 interface Step {
   ex: Exercise;
@@ -359,7 +416,11 @@ const STEPS: Step[] = ROUTINE.flatMap((ex): Step[] =>
 /** Seconds to get into position after pressing Start. */
 const READY_SEC = 5;
 
-export const ROUTINE_MINUTES = Math.round(STEPS.reduce((n, s) => n + s.ex.sec + READY_SEC + 10, 0) / 60);
+/** About how long the routine takes, including getting into position. */
+export function routineMinutes(): number {
+  const s = loadMobility();
+  return Math.round(STEPS.reduce((n, st) => n + secFor(st.ex, s) + READY_SEC + 10, 0) / 60);
+}
 
 /**
  * Runs the routine in the #mobility-overlay screen.
@@ -376,9 +437,28 @@ export class MobilityRoutine {
   private pausedBeforeDemo = false;
   private lastTick = 0;
   private timer = 0;
+  /** Holds finished on their own clock in this run; the routine counts toward progress at half of the steps. */
+  private holdsDone = 0;
+  private counted = false;
+  /** Knee-to-wall form on the end screen: shown when due, or when asked for. */
+  private measuring = false;
+  private measureSaved = false;
   private readonly $ = (id: string) => document.getElementById(id) as HTMLElement;
 
-  constructor(private chime: () => void) {
+  /** @param onChange called after progress is saved (to back it up). */
+  constructor(
+    private chime: () => void,
+    private onChange: () => void = () => {},
+  ) {
+    this.$('mb-extra').addEventListener('click', (e) => {
+      const t = e.target as HTMLElement;
+      if (t.id === 'btn-mb-measure') {
+        this.measuring = true;
+        this.render();
+      } else if (t.id === 'btn-mb-measure-save') {
+        this.saveMeasurement();
+      }
+    });
     this.$('btn-mb-back').addEventListener('click', () => this.go(this.i - 1));
     this.$('btn-mb-next').addEventListener('click', () => (this.phase === 'done' ? this.close() : this.go(this.i + 1)));
     this.$('btn-mb-start').addEventListener('click', () => {
@@ -398,6 +478,10 @@ export class MobilityRoutine {
 
   open() {
     this.$('mobility-overlay').hidden = false;
+    this.holdsDone = 0;
+    this.counted = false;
+    this.measureSaved = false;
+    this.measuring = false;
     this.go(0);
     this.lastTick = Date.now();
     clearInterval(this.timer);
@@ -433,10 +517,11 @@ export class MobilityRoutine {
     if (i < 0) i = 0;
     if (i >= STEPS.length) {
       this.phase = 'done';
+      this.finish();
     } else {
       this.i = i;
       this.phase = 'waiting';
-      this.left = STEPS[i].ex.sec;
+      this.left = secFor(STEPS[i].ex);
     }
     this.paused = false;
     this.render();
@@ -452,11 +537,80 @@ export class MobilityRoutine {
     this.chime();
     if (this.phase === 'ready') {
       this.phase = 'hold';
-      this.left = STEPS[this.i].ex.sec;
+      this.left = secFor(STEPS[this.i].ex);
       this.render();
     } else {
+      this.holdsDone++;
       this.go(this.i + 1);
     }
+  }
+
+  /** End of the routine: count it (once a day, if at least half was done) and offer the measurement when due. */
+  private finish() {
+    const s = loadMobility();
+    const now = Date.now();
+    if (!this.counted && this.holdsDone >= Math.ceil(STEPS.length / 2) && !s.completed.some((t) => sameDay(t, now))) {
+      s.completed.push(now);
+      saveMobility(s);
+      this.counted = true;
+      this.onChange();
+    }
+    this.measuring = measureDue(s, now);
+  }
+
+  private saveMeasurement() {
+    const read = (id: string) => parseFloat((this.$(id) as HTMLInputElement).value);
+    const left = read('mb-kw-left');
+    const right = read('mb-kw-right');
+    const ok = (v: number) => Number.isFinite(v) && v >= 0 && v <= 12;
+    if (!ok(left) || !ok(right)) {
+      this.$('mb-kw-msg').textContent = 'Enter both sides in inches (0 to 12, e.g. 3.5).';
+      return;
+    }
+    const s = loadMobility();
+    s.kneeWall.push({ t: Date.now(), left, right });
+    saveMobility(s);
+    this.measuring = false;
+    this.measureSaved = true;
+    this.onChange();
+    this.render();
+  }
+
+  /** The end screen: what changes next time, and the knee-to-wall measurement. */
+  private renderDone() {
+    const s = loadMobility();
+    const toNext = ROUTINES_PER_STEP - (s.completed.length % ROUTINES_PER_STEP);
+    const holdTimes = ROUTINE.filter((e) => e.how === 'Hold').map((e) => secFor(e, s));
+    const lo = Math.min(...holdTimes);
+    const hi = Math.max(...holdTimes);
+    const lines: string[] = [];
+    lines.push(this.counted ? `Routines done: ${s.completed.length}.` : `Routines done: ${s.completed.length} (this one did not count: less than half was timed, or one was already counted today).`);
+    lines.push(
+      hi >= HOLD_MAX_SEC && lo >= HOLD_MAX_SEC
+        ? 'Holds are at the full 60 s.'
+        : `Holds now: ${lo === hi ? `${lo}` : `${lo}–${hi}`} s. They get ${HOLD_STEP_SEC} s longer after ${toNext} more routine${toNext === 1 ? '' : 's'}.`,
+    );
+    const last = s.kneeWall.at(-1);
+    const fmt = (t: number) => new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    let measure = '';
+    if (this.measuring) {
+      measure =
+        '<div class="mb-measure"><h3>Knee-to-wall measurement</h3>' +
+        '<p>Set up as in the knee-to-wall exercise. Move the front foot back until the knee only just touches the wall with the heel flat. ' +
+        'Measure from the wall to the tip of the big toe.</p>' +
+        '<div class="mb-kw-inputs"><label>Left (in) <input id="mb-kw-left" type="number" step="0.25" min="0" max="12" inputmode="decimal"></label>' +
+        '<label>Right (in) <input id="mb-kw-right" type="number" step="0.25" min="0" max="12" inputmode="decimal"></label>' +
+        '<button id="btn-mb-measure-save" class="primary">Save</button></div><p id="mb-kw-msg" class="fine-print"></p></div>';
+    } else {
+      const lastText = last
+        ? `Knee to wall, ${fmt(last.t)}: left ${last.left} in, right ${last.right} in.`
+        : 'No knee-to-wall measurement yet.';
+      const nextText = last ? ` Next suggested around ${fmt(last.t + MEASURE_EVERY_DAYS * DAY_MS)}.` : '';
+      measure =
+        `<p>${this.measureSaved ? 'Saved. ' : ''}${lastText}${nextText}</p>` +
+        '<button id="btn-mb-measure" class="small">Measure knee to wall now</button>';
+    }
+    this.$('mb-extra').innerHTML = `${lines.map((l) => `<p>${l}</p>`).join('')}${measure}`;
   }
 
   private renderTimer() {
@@ -486,14 +640,16 @@ export class MobilityRoutine {
       for (const id of ['mb-side', 'mb-how', 'mb-cues', 'mb-sketch', 'mb-timer-label', 'mb-timer', 'mb-next']) {
         this.$(id).innerHTML = '';
       }
+      this.renderDone();
       return;
     }
+    this.$('mb-extra').innerHTML = '';
     const { ex, side } = STEPS[this.i];
     const sideName = side ? (side === 'left' ? 'left side' : 'right side') : '';
     this.$('mb-step').textContent = `Step ${this.i + 1} of ${STEPS.length}`;
     this.$('mb-name').textContent = ex.name;
     this.$('mb-side').textContent = side ? (side === 'left' ? 'Left side' : 'Right side') : '';
-    this.$('mb-how').textContent = `${ex.how} · ${ex.sec} s${ex.sides ? ' each side' : ''}`;
+    this.$('mb-how').textContent = `${ex.how} · ${secFor(ex)} s${ex.sides ? ' each side' : ''}`;
     this.$('mb-cues').innerHTML = ex.cues.map((c) => `<li>${c}</li>`).join('');
     if (!this.demo) this.$('mb-sketch').innerHTML = sketchHtml(ex, side === 'right');
     const scope = side ? sideName : 'this exercise';

@@ -11,7 +11,7 @@ import { diag, saveDiagnostics } from './diagnostics';
 import { drawForceCurves, drawSessionHr } from './charts';
 import { HeartRateTracker, ZONE_LABEL, type Zone } from './heartrate';
 import { remindersEnabled, scheduleReminder, sendTestNotification } from './notify';
-import { MobilityRoutine, ROUTINE_MINUTES } from './mobility';
+import { MobilityRoutine, routineMinutes } from './mobility';
 import { attachTooltips, renderProgress } from './progress';
 import { VideoPlayer } from './video';
 import { loadHistory, Session, updateSession, type Phase, type SessionSummary } from './session';
@@ -227,7 +227,7 @@ function renderPhaseActions(today: Today, hasHr: boolean) {
       } else if (today.kind === 'paused') {
         buttons.push(['My doctor has cleared me', resumeTrainer]);
       }
-      buttons.push([`Mobility (${ROUTINE_MINUTES} min)`, openMobility, 'ghost']);
+      buttons.push([`Mobility (${routineMinutes()} min)`, openMobility, 'ghost']);
       break;
     case 'standby':
       buttons.push(['Start now', () => session.begin()]);
@@ -883,7 +883,7 @@ el.summaryDialog.addEventListener('cancel', (e) => {
 el.summaryClose.addEventListener('click', () => el.summaryDialog.close());
 
 // ---------- Mobility routine (after rowing, or any time from the start screen) ----------
-const mobility = new MobilityRoutine(() => alarm.chime());
+const mobility = new MobilityRoutine(() => alarm.chime(), () => void backupNow());
 function openMobility() {
   alarm.unlock();
   if (el.summaryDialog.open) el.summaryDialog.close();
@@ -905,8 +905,9 @@ const progressEls = {
   target: $<HTMLCanvasElement>('pc-target'),
   recovery: $<HTMLCanvasElement>('pc-recovery'),
   weekly: $<HTMLCanvasElement>('pc-weekly'),
+  knee: $<HTMLCanvasElement>('pc-knee'),
 };
-attachTooltips([progressEls.check, progressEls.target, progressEls.recovery, progressEls.weekly], el.chartTip);
+attachTooltips([progressEls.check, progressEls.target, progressEls.recovery, progressEls.weekly, progressEls.knee], el.chartTip);
 
 $('btn-progress').addEventListener('click', () => {
   el.progressOverlay.hidden = false;

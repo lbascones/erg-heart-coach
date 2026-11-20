@@ -5,7 +5,7 @@
  *    ~/rowing-backups on the laptop (and rclone copies that folder to Google Drive).
  */
 
-const STORAGE_KEYS = ['rowing.settings.v1', 'rowing.trainer.v1', 'rowing.history.v1'] as const;
+const STORAGE_KEYS = ['rowing.settings.v1', 'rowing.trainer.v1', 'rowing.history.v1', 'rowing.mobility.v1'] as const;
 const LAST_BACKUP_KEY = 'rowing.lastBackupAt';
 
 export interface BackupData {
