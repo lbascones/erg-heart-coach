@@ -11,6 +11,7 @@ import { diag, saveDiagnostics } from './diagnostics';
 import { drawForceCurves, drawSessionHr } from './charts';
 import { HeartRateTracker, ZONE_LABEL, type Zone } from './heartrate';
 import { remindersEnabled, scheduleReminder, sendTestNotification } from './notify';
+import { MobilityRoutine, ROUTINE_MINUTES } from './mobility';
 import { attachTooltips, renderProgress } from './progress';
 import { VideoPlayer } from './video';
 import { loadHistory, Session, updateSession, type Phase, type SessionSummary } from './session';
@@ -226,6 +227,7 @@ function renderPhaseActions(today: Today, hasHr: boolean) {
       } else if (today.kind === 'paused') {
         buttons.push(['My doctor has cleared me', resumeTrainer]);
       }
+      buttons.push([`Mobility (${ROUTINE_MINUTES} min)`, openMobility, 'ghost']);
       break;
     case 'standby':
       buttons.push(['Start now', () => session.begin()]);
@@ -835,6 +837,7 @@ function showSummary(s: SessionSummary) {
   el.feedbackSave.hidden = false;
   el.feedbackSave.disabled = true;
   el.summaryClose.hidden = true;
+  summaryMobility.hidden = true;
   el.summaryDialog.showModal();
   const has = s.hrTrace.some((v) => v > 0);
   el.summaryHrChart.parentElement!.hidden = !has;
@@ -852,6 +855,7 @@ el.feedbackSave.addEventListener('click', () => {
   el.feedback.hidden = true;
   el.feedbackSave.hidden = true;
   el.summaryClose.hidden = false;
+  summaryMobility.hidden = false;
   void scheduleNextReminder();
   void backupNow();
 });
@@ -877,6 +881,16 @@ el.summaryDialog.addEventListener('cancel', (e) => {
   if (!el.feedbackSave.hidden) e.preventDefault();
 });
 el.summaryClose.addEventListener('click', () => el.summaryDialog.close());
+
+// ---------- Mobility routine (after rowing, or any time from the start screen) ----------
+const mobility = new MobilityRoutine(() => alarm.chime());
+function openMobility() {
+  alarm.unlock();
+  if (el.summaryDialog.open) el.summaryDialog.close();
+  mobility.open();
+}
+const summaryMobility = $('btn-summary-mobility');
+summaryMobility.addEventListener('click', openMobility);
 // However the dialog closes (button or Escape after answering), return to the idle screen exactly once.
 el.summaryDialog.addEventListener('close', () => {
   session.reset();

@@ -500,3 +500,56 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 /* Diagnostics recording indicator */
 button.rec { color: #ff6b6b; border-color: #ff6b6b; }
 #diag-status { min-height: 1.4em; }
+
+/* ---------- Mobility routine ---------- */
+.mb-card {
+  width: min(1200px, calc(100% - 32px)); height: min(720px, calc(100% - 32px));
+  display: flex; flex-direction: column; gap: 12px; padding: 20px 24px;
+  background: #11161d; border: 1px solid var(--panel-border); border-radius: 18px;
+}
+.mb-top { display: flex; justify-content: space-between; align-items: center; }
+.mb-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 24px; }
+#mb-sketch { min-height: 0; display: flex; align-items: center; justify-content: center; background: rgba(255, 255, 255, 0.04); border-radius: 14px; }
+.mb-info { display: flex; flex-direction: column; min-height: 0; overflow: auto; }
+#mb-name { font-size: clamp(1.8rem, 5vh, 2.8rem); margin: 0; }
+#mb-side { font-size: 1.4rem; font-weight: 700; color: var(--high); min-height: 1.2em; }
+#mb-how { color: var(--text-muted); font-size: 1.1rem; }
+#mb-cues { margin: 12px 0; padding-left: 1.2em; font-size: clamp(1.05rem, 2.6vh, 1.4rem); line-height: 1.4; }
+#mb-cues li { margin-bottom: 6px; }
+#mb-timer-label { margin-top: auto; }
+#mb-timer { font-size: clamp(3.5rem, 13vh, 7rem); font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; color: var(--target); }
+#mobility-overlay.mb-waiting #mb-timer { color: var(--text-muted); }
+#mb-next { color: var(--text-muted); margin-top: 6px; }
+.mb-buttons { display: flex; justify-content: flex-end; gap: 12px; }
+.mb-buttons button[hidden] { display: none; }
+#mobility-overlay.mb-done .mb-body { grid-template-columns: 1fr; }
+#mobility-overlay.mb-done #mb-sketch { display: none; }
+
+.mb-top-buttons { display: flex; gap: 10px; }
+.mb-top-buttons button[hidden] { display: none; }
+
+/* Sketches: one picture for a hold, or numbered pictures side by side (start -> finish). */
+#mb-sketch { gap: 10px; padding: 10px; }
+.mb-panel { flex: 1; min-width: 0; height: 100%; margin: 0; display: flex; flex-direction: column; justify-content: center; }
+.mb-panel svg { flex: 0 1 auto; width: 100%; height: auto; aspect-ratio: 300 / 210; min-height: 0; }
+.mb-panel figcaption { text-align: center; color: var(--text-muted); font-size: 1.05rem; margin-top: 6px; }
+.mb-panel figcaption b {
+  display: inline-grid; place-items: center; width: 1.6em; height: 1.6em; margin-right: 4px;
+  border-radius: 50%; background: var(--accent); color: #04121c; font-size: 0.85em;
+}
+#mb-sketch iframe { width: 100%; height: 100%; border: 0; border-radius: 10px; background: #000; }
+#mobility-overlay.mb-demo #mb-sketch { padding: 0; }
+
+/* Figures: thick torso, near limbs white, far limbs darker; orange = where you feel it; blue arrows = movement. */
+.mb-fig path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.mb-fig .mb-torso { stroke: var(--text); stroke-width: 16; }
+.mb-fig .mb-limb { stroke: var(--text); stroke-width: 11; }
+.mb-fig .mb-limb-far { stroke: #7c8796; stroke-width: 11; }
+.mb-fig circle { fill: var(--text); }
+.mb-ghost { opacity: 0.25; }
+.mb-feel { fill: none; stroke: #f97316; stroke-width: 20; stroke-linecap: round; opacity: 0.65; }
+.mb-feel-spot { fill: #f97316; opacity: 0.65; }
+.mb-arrow { fill: none; stroke: var(--accent); stroke-width: 5; stroke-linecap: round; }
+.mb-arrowhead { fill: var(--accent); }
+.mb-prop { fill: none; stroke: var(--text-muted); stroke-width: 4; stroke-linecap: round; opacity: 0.6; }
+.mb-mat { fill: rgba(56, 189, 248, 0.06); stroke: rgba(56, 189, 248, 0.35); stroke-width: 2; stroke-dasharray: 6 5; }

@@ -90,6 +90,7 @@ message on screen and saves the details in `~/rowing-backups/diagnostics` (copie
 | `src/trainer.ts` | Levels, scheduling, progression and time-off rules, fitness checks |
 | `src/progress.ts` | Progress screen charts and tiles |
 | `src/notify.ts` | Scheduled phone reminders through ntfy |
+| `src/mobility.ts` | After-rowing mobility routine: sketches, cues, timers |
 | `src/backup.ts` | Export, import, automatic backup and restore |
 | `src/diagnostics.ts` | Diagnostics recorder (raw USB traffic, events, errors) |
 | `server.js`, `server/backup.js` | Laptop server: serves the app, writes backups and diagnostics, runs the Drive sync |

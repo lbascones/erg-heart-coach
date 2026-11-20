@@ -181,6 +181,7 @@
       <div class="dialog-buttons">
         <span class="spacer"></span>
         <button id="btn-feedback-save" class="primary" disabled>Save</button>
+        <button id="btn-summary-mobility" hidden>Mobility</button>
         <button id="btn-summary-close" class="primary" hidden>Done</button>
       </div>
     </dialog>
@@ -210,6 +211,35 @@
         <button id="btn-diag-toggle" class="primary">Start recording</button>
       </div>
     </dialog>
+
+    <div id="mobility-overlay" class="overlay" hidden>
+      <div class="mb-card">
+        <div class="mb-top">
+          <span id="mb-step" class="m-label"></span>
+          <span class="mb-top-buttons">
+            <button id="btn-mb-demo" class="small">Demo video</button>
+            <button id="btn-mb-end" class="ghost small">End</button>
+          </span>
+        </div>
+        <div class="mb-body">
+          <div id="mb-sketch"></div>
+          <div class="mb-info">
+            <h2 id="mb-name"></h2>
+            <div id="mb-side"></div>
+            <div id="mb-how"></div>
+            <ul id="mb-cues"></ul>
+            <div id="mb-timer-label" class="m-label"></div>
+            <div id="mb-timer"></div>
+            <div id="mb-next"></div>
+          </div>
+        </div>
+        <div class="mb-buttons">
+          <button id="btn-mb-back" class="big">Back</button>
+          <button id="btn-mb-start" class="big">Start</button>
+          <button id="btn-mb-next" class="big">Skip</button>
+        </div>
+      </div>
+    </div>
 
     <div id="progress-overlay" class="overlay" hidden>
       <div class="progress-wrap">
