@@ -1,7 +1,7 @@
 import type { Zone } from './heartrate';
 import type { Settings } from './settings';
 import type { RowerSample } from './sources/source';
-import type { SessionPlan, SessionType } from './trainer';
+import { CHECK_MAIN_MIN, type SessionPlan, type SessionType } from './trainer';
 
 /** 'standby': Start was pressed, waiting for the first stroke (the laptop is out of reach from the seat). */
 export type Phase = 'idle' | 'standby' | 'warmup' | 'main' | 'cooldown' | 'done';
@@ -11,7 +11,7 @@ export type Phase = 'idle' | 'standby' | 'warmup' | 'main' | 'cooldown' | 'done'
  * Same method as exercise tests, but after moderate work the drop is smaller: compare with your own sessions, not published values.
  */
 export const HR_DROP_SECONDS = 60;
-/** Fitness check: only the last part of the main phase is scored, once HR has settled. */
+/** Fitness check: only the last part of the check (the first CHECK_MAIN_MIN of the main phase) is scored, once HR has settled. */
 const CHECK_SCORED_SECONDS = 5 * 60;
 /** Fitness check: HR samples further than this from the test HR are ignored. */
 const CHECK_HR_TOLERANCE = 5;
@@ -36,6 +36,8 @@ export interface SessionSummary {
   /** Fitness check only: heart rate held and average watts at it. */
   testHr?: number;
   checkWatts?: number;
+  /** Fitness check thrown away with "Redo the latest check" (its score is removed). */
+  checkDiscarded?: boolean;
   /** HR at the end of the workout and after the first minute of the cool-down (0 = not measured). */
   hrDropFrom?: number;
   hrDropTo?: number;
@@ -88,6 +90,7 @@ export class Session {
   cooldownWatts = 0;
   private targetPower = new Averager();
   private checkPower = new Averager();
+  private wasInCheck = false;
   private lastPower = 0;
   private hrTrace: number[] = [];
   private lastTraceAt = 0;
@@ -126,6 +129,17 @@ export class Session {
     if (this.phase === 'main' && this.plan.mainMinutes !== null) return this.plan.mainMinutes * 60;
     if (this.phase === 'cooldown') return this.settings.cooldownMinutes * 60;
     return null;
+  }
+
+  /**
+   * Fitness-check day, main phase: the first CHECK_MAIN_MIN minutes hold the test heart rate (the check),
+   * then the rest of the planned time is normal rowing in your zone. Null once the check part is over.
+   */
+  checkPart(now = Date.now()): { secondsIn: number; secondsLeft: number } | null {
+    if (this.phase !== 'main' || this.plan.type !== 'check') return null;
+    const t = Math.max(0, (now - this.phaseStartedAt) / 1000);
+    const len = CHECK_MAIN_MIN * 60;
+    return t < len ? { secondsIn: t, secondsLeft: len - t } : null;
   }
 
   /**
@@ -241,8 +255,8 @@ export class Session {
       // Interval sessions are left out: their "target" during the hard pieces is a different band.
       if (zone === 'target' && this.lastPower > 0 && this.plan.type !== 'intervals') this.targetPower.add(this.lastPower, dt);
       if (this.plan.type === 'check' && this.plan.testHr && hasHr && this.lastPower > 0) {
-        const left = this.phaseClock(now).seconds;
-        if (left <= CHECK_SCORED_SECONDS && Math.abs(hr - this.plan.testHr) <= CHECK_HR_TOLERANCE) {
+        const left = this.checkPart(now)?.secondsLeft ?? 0;
+        if (left > 0 && left <= CHECK_SCORED_SECONDS && Math.abs(hr - this.plan.testHr) <= CHECK_HR_TOLERANCE) {
           this.checkPower.add(this.lastPower, dt);
         }
       }
@@ -262,6 +276,10 @@ export class Session {
     const pieceKey = piece ? `${piece.rep}|${piece.hard}` : '';
     const pieceChanged = this.lastPieceKey !== '' && pieceKey !== '' && pieceKey !== this.lastPieceKey;
     this.lastPieceKey = pieceKey;
+    // Chime when the check part ends and normal zone rowing begins.
+    const inCheck = this.checkPart(now) !== null;
+    const checkEnded = this.wasInCheck && !inCheck && this.phase === 'main';
+    this.wasInCheck = inCheck;
 
     const clock = this.phaseClock(now);
     if (clock.countdown && clock.seconds <= 0) {
@@ -270,7 +288,7 @@ export class Session {
       else if (this.phase === 'cooldown') this.setPhase('done', now);
       return true;
     }
-    return pieceChanged;
+    return pieceChanged || checkEnded;
   }
 
   /** Builds the summary and adds it to the saved history. Call once when the phase becomes 'done'. */

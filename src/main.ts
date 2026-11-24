@@ -14,7 +14,7 @@ import { remindersEnabled, scheduleReminder, sendTestNotification } from './noti
 import { MobilityRoutine, routineMinutes } from './mobility';
 import { attachTooltips, renderProgress } from './progress';
 import { VideoPlayer } from './video';
-import { loadHistory, Session, updateSession, type Phase, type SessionSummary } from './session';
+import { loadHistory, saveHistory, Session, updateSession, type Phase, type SessionSummary } from './session';
 import {
   ageOn,
   defaultsForAge,
@@ -33,9 +33,11 @@ import { SimulatorSource } from './sources/simulator';
 import type { ConnectionStatus, RowerSample, RowerSource } from './sources/source';
 import {
   applyLayoff,
+  CHECK_MAIN_MIN,
   dayNumber,
   daysSinceLastSession,
   dayToDate,
+  discardLatestCheck,
   levelInfo,
   loadTrainer,
   planToday,
@@ -52,6 +54,15 @@ const alarm = new Alarm();
 alarm.enabled = settings.sound;
 const session = new Session(settings);
 const trainer = loadTrainer();
+// Older versions marked an unscored fitness check as done (next one in 4 weeks): redo it at the next session instead.
+{
+  const history = loadHistory();
+  const last = history.filter((s) => s.type === 'check' && !s.checkDiscarded).at(-1);
+  if (last && !last.checkWatts && trainer.lastCheckAt === last.startedAt) {
+    discardLatestCheck(trainer, history);
+    saveHistory(history);
+  }
+}
 let welcomeBack = applyLayoff(trainer, Date.now());
 /** Shown on the home screen after a birthday moved the estimated heart-rate limits. */
 let birthdayNotice: string | null = null;
@@ -206,11 +217,11 @@ type ActionButton = [label: string, fn: () => void, cls?: string, disabled?: boo
 let renderedActionsKey = '';
 
 function renderPhaseActions(today: Today, hasHr: boolean) {
-  const key = `${session.phase}|${today.kind}|${hasHr}|${session.plan.type}`;
+  const key = `${session.phase}|${session.checkPart() ? 'chk' : ''}|${today.kind}|${today.kind === 'row' ? today.plan.type : ''}|${hasHr}|${session.plan.type}`;
   if (key === renderedActionsKey) return;
   renderedActionsKey = key;
   el.phaseName.textContent =
-    session.phase === 'main' && session.plan.type === 'check'
+    session.checkPart()
       ? 'Fitness check'
       : session.phase === 'main' && session.plan.type === 'intervals'
         ? 'Intervals'
@@ -221,7 +232,13 @@ function renderPhaseActions(today: Today, hasHr: boolean) {
     case 'idle':
       if (today.kind === 'row') {
         // No heart rate needed to press Start: the strap may be out of the receiver's range at the laptop.
-        buttons.push(["Start today's session", () => startSession(today.plan), 'primary huge']);
+        const startLabel =
+          today.plan.type === 'check'
+            ? 'Start fitness check'
+            : today.plan.type === 'intervals'
+              ? 'Start interval session'
+              : "Start today's session";
+        buttons.push([startLabel, () => startSession(today.plan), 'primary huge']);
       } else if (today.kind === 'rest' || today.kind === 'done-today') {
         buttons.push(['Row anyway (free row)', () => startSession(freePlan())]);
       } else if (today.kind === 'paused') {
@@ -307,6 +324,9 @@ function guidance(zone: Zone, today: Today): [string, string] {
         return [
           today.text,
           waiting ||
+            (today.plan.type === 'check'
+              ? `For the first ${CHECK_MAIN_MIN} min hold one heart rate, ${today.plan.testHr} bpm, instead of your usual zone: it measures your watts at that heart rate.`
+              : '') ||
             birthdayNotice ||
             welcomeBack ||
             shortBreak ||
@@ -327,6 +347,12 @@ function guidance(zone: Zone, today: Today): [string, string] {
 
   switch (session.phase) {
     case 'warmup':
+      if (session.plan.type === 'check') {
+        return [
+          zone === 'easy' ? 'Warm up gently. A fitness check comes next.' : 'Ease off a little: still warming up.',
+          `After the warm-up, hold ${session.plan.testHr} bpm for ${CHECK_MAIN_MIN} min, not your usual zone.`,
+        ];
+      }
       return zone === 'easy'
         ? ['Warm up gently.', `Easy strokes. Stay below ${s.targetLow} bpm for now.`]
         : ['Ease off a little: still warming up.', `Stay below ${s.targetLow} bpm until the workout starts.`];
@@ -342,10 +368,10 @@ function guidance(zone: Zone, today: Today): [string, string] {
           piece.last ? 'That was the last hard piece. Well done.' : 'Gentle strokes. Get ready for the next piece.',
         ];
       }
-      if (session.plan.type === 'check') {
+      if (session.checkPart()) {
         const hr = session.plan.testHr!;
         if (zone === 'easy') return [`Build up gently to ${hr} bpm.`, 'Steady and smooth, no sprints.'];
-        if (zone === 'target') return [`Hold it right here: ${hr} bpm.`, 'The last 5 minutes are scored.'];
+        if (zone === 'target') return [`Hold it right here: ${hr} bpm.`, 'The last 5 minutes of the check are scored.'];
         return [`Ease off slightly: aim for ${hr} bpm.`, ''];
       }
       if (zone === 'easy') return ['Push a little harder to reach your target.', `Target: ${range} bpm.`];
@@ -384,7 +410,7 @@ function renderCoach(now: number) {
       stage = 'Standing by';
       break;
     case 'warmup':
-      stage = 'Warm-up';
+      stage = session.plan.type === 'check' ? `Warm-up · then fitness check at ${session.plan.testHr} bpm` : 'Warm-up';
       clocks.push(left('Warm-up left', clock.seconds, true));
       break;
     case 'main':
@@ -393,10 +419,12 @@ function renderCoach(now: number) {
         clocks.push([piece.hard ? 'In this piece' : 'Easy so far', piece.secondsIn]);
         clocks.push([piece.hard ? (piece.last ? 'Cool-down in' : 'Easy in') : 'Next hard piece in', piece.secondsLeft, true]);
         clocks.push(left('Workout left', clock.seconds));
-      } else if (session.plan.type === 'check') {
-        stage = 'Fitness check';
-        clocks.push(['Workout so far', inPhase]);
-        clocks.push(left('Workout left', clock.seconds, true));
+      } else if (session.checkPart(now)) {
+        const part = session.checkPart(now)!;
+        stage = `Fitness check · hold ${session.plan.testHr} bpm`;
+        clocks.push(['Check so far', part.secondsIn]);
+        clocks.push(left('Check left', part.secondsLeft, true));
+        clocks.push(left('Workout left', clock.seconds));
       } else if (clock.countdown) {
         stage = 'Steady in your zone';
         clocks.push(['Workout so far', inPhase]);
@@ -487,7 +515,7 @@ function update() {
   }
 
   // During a fitness check's main part, "target" means a narrow band around the test HR.
-  const checking = session.phase === 'main' && session.plan.type === 'check' && session.plan.testHr;
+  const checking = !!session.checkPart(now) && session.plan.testHr;
   // During an interval session's hard pieces, "target" means the top of the zone up to the ceiling.
   const hardPiece = session.intervalState(now)?.hard ?? false;
   tracker.setTargetOverride(
@@ -601,12 +629,15 @@ async function scheduleNextReminder() {
   const when = dayToDate(day);
   when.setHours(settings.reminderHour, 0, 0, 0);
   if (when.getTime() <= now && today.kind === 'row') return; // already past today's reminder time
+  // The plan for the reminder's day (booked the evening before, today is a rest day, so ask about that day).
+  const that = planToday(trainer, settings, when.getTime());
+  const plan = that.kind === 'row' ? that.plan : null;
   const lvl = levelInfo(trainer.level);
   const msg =
-    today.kind === 'row' && today.plan.type === 'check'
-      ? 'Fitness check day: 10 minutes at a steady heart rate. Your rowing display is ready when you are.'
-      : today.kind === 'row' && today.plan.type === 'intervals'
-        ? `Interval day: ${today.plan.mainMinutes} minutes of harder pieces with easy rowing between, plus warm-up and cool-down.`
+    plan?.type === 'check'
+      ? `Rowing day with a fitness check: ${plan.mainMinutes} minutes, the first ${CHECK_MAIN_MIN} holding one heart rate, ${plan.testHr} bpm (not your usual zone), then your zone.`
+      : plan?.type === 'intervals'
+        ? `Interval day: ${plan.mainMinutes} minutes of harder pieces with easy rowing between, plus warm-up and cool-down.`
         : `Rowing day: ${lvl.mainMin} minutes in your zone, plus warm-up and cool-down.`;
   const result = await scheduleReminder(settings, when, msg);
   if (result.status === 'scheduled') reminderNotice.hidden = true;
@@ -909,10 +940,28 @@ const progressEls = {
 };
 attachTooltips([progressEls.check, progressEls.target, progressEls.recovery, progressEls.weekly, progressEls.knee], el.chartTip);
 
+const redoCheckBtn = $('btn-redo-check');
+function showProgress() {
+  redoCheckBtn.hidden = !loadHistory().some((s) => s.type === 'check' && !s.checkDiscarded);
+  renderProgress(progressEls, trainer);
+}
 $('btn-progress').addEventListener('click', () => {
   el.progressOverlay.hidden = false;
   showBackupStatus();
-  requestAnimationFrame(() => renderProgress(progressEls, trainer));
+  requestAnimationFrame(showProgress);
+});
+redoCheckBtn.addEventListener('click', () => {
+  const latest = loadHistory().filter((s) => s.type === 'check' && !s.checkDiscarded).at(-1);
+  if (!latest) return;
+  const when = new Date(latest.startedAt).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
+  if (!confirm(`Discard the fitness check from ${when}? Its score is removed and your next session is a fitness check again.`)) return;
+  const history = loadHistory();
+  if (!discardLatestCheck(trainer, history)) return;
+  saveHistory(history);
+  renderedActionsKey = '';
+  showProgress();
+  void scheduleNextReminder();
+  void backupNow();
 });
 $('btn-progress-close').addEventListener('click', () => {
   el.progressOverlay.hidden = true;
@@ -1047,8 +1096,14 @@ function workoutSegments(): Segment[] | null {
       if (r < iv.reps) segs.push({ kind: 'easy', sec: iv.easySec, label: 'Easy' });
     }
   } else {
-    const label = session.plan.type === 'check' ? 'Fitness check' : 'Steady';
-    segs.push({ kind: 'steady', sec: session.plan.mainMinutes * 60, label });
+    const main = session.plan.mainMinutes * 60;
+    if (session.plan.type === 'check') {
+      const chk = Math.min(main, CHECK_MAIN_MIN * 60);
+      segs.push({ kind: 'steady', sec: chk, label: 'Fitness check' });
+      if (main > chk) segs.push({ kind: 'steady', sec: main - chk, label: 'Steady' });
+    } else {
+      segs.push({ kind: 'steady', sec: main, label: 'Steady' });
+    }
   }
   if (cool > 0) segs.push({ kind: 'cool', sec: cool, label: 'Cool-down' });
   return segs;
@@ -1153,7 +1208,7 @@ $('btn-fullscreen').addEventListener('click', () => {
 });
 window.addEventListener('resize', () => {
   drawForceCurves(el.forceChart, curves);
-  if (!el.progressOverlay.hidden) renderProgress(progressEls, trainer);
+  if (!el.progressOverlay.hidden) showProgress();
 });
 // Unlock audio on the first tap anywhere (browsers block sound until then).
 window.addEventListener('pointerdown', () => alarm.unlock(), { once: true });

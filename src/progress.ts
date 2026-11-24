@@ -1,5 +1,15 @@
 import { loadHistory, type SessionSummary } from './session';
-import { dayNumber, dayToDate, GOOD_TO_LEVEL_UP, levelInfo, LEVELS, type TrainerState } from './trainer';
+import {
+  dayNumber,
+  dayToDate,
+  GOOD_TO_LEVEL_UP,
+  intervalMinutes,
+  intervalsFor,
+  levelInfo,
+  LEVELS,
+  weeklyGoalMinutes,
+  type TrainerState,
+} from './trainer';
 import { loadMobility, ROUTINE, secFor } from './mobility';
 
 /** A plotted point plus the text its tooltip shows. */
@@ -249,6 +259,8 @@ export interface ProgressEls {
 export function renderProgress(els: ProgressEls, trainer: TrainerState) {
   const history = loadHistory().filter((s) => s.durationSec >= 60);
   const lvl = levelInfo(trainer.level);
+  const iv = intervalsFor(trainer.level);
+  const goal = weeklyGoalMinutes(trainer.level);
   const now = Date.now();
   const today = dayNumber(now);
 
@@ -261,7 +273,19 @@ export function renderProgress(els: ProgressEls, trainer: TrainerState) {
     if (wk) wk.minutes += s.mainSec / 60;
   }
 
-  const totalKm = history.reduce((a, s) => a + s.distance, 0) / 1000;
+  // This week's goal: the planned length of the sessions already done (a fitness check or interval day is
+  // shorter than a steady one), plus the usual plan for the sessions still to come.
+  const doneThisWeek = history.filter((s) => mondayOf(dayNumber(s.startedAt)) === thisMonday).slice(0, lvl.perWeek);
+  const plannedMin = (s: SessionSummary) => (s.plannedMainSec ? s.plannedMainSec / 60 : lvl.mainMin);
+  let weekGoal = doneThisWeek.reduce((a, s) => a + plannedMin(s), 0);
+  let intervalPending = !!iv && !doneThisWeek.some((s) => s.type === 'intervals');
+  for (let i = doneThisWeek.length; i < lvl.perWeek; i++) {
+    weekGoal += intervalPending ? intervalMinutes(iv!) : lvl.mainMin;
+    intervalPending = false;
+  }
+  weekGoal = Math.round(weekGoal);
+
+  const totalKm =history.reduce((a, s) => a + s.distance, 0) / 1000;
   const mob = loadMobility();
   const holds = ROUTINE.filter((e) => e.how === 'Hold').map((e) => secFor(e, mob));
   const holdText = Math.min(...holds) === Math.max(...holds) ? `${holds[0]} s` : `${Math.min(...holds)}–${Math.max(...holds)} s`;
@@ -276,8 +300,12 @@ export function renderProgress(els: ProgressEls, trainer: TrainerState) {
       `${trainer.level} <small>of ${LEVELS.length}</small>`,
       trainer.level < LEVELS.length ? `${trainer.goodStreak}/${GOOD_TO_LEVEL_UP} good sessions to next` : 'Top level',
     ),
-    tile('Current plan', `${lvl.mainMin} min`, `${lvl.perWeek}× a week`),
-    tile('This week', `${Math.round(weeks.at(-1)!.minutes)} min`, `goal ${lvl.perWeek * lvl.mainMin} min`),
+    tile(
+      'Current plan',
+      `${lvl.mainMin} min`,
+      iv ? `${lvl.perWeek}× a week, 1 is ${intervalMinutes(iv)} min intervals` : `${lvl.perWeek}× a week`,
+    ),
+    tile('This week', `${Math.round(weeks.at(-1)!.minutes)} min`, `goal ${weekGoal} min`),
     tile('Sessions', String(history.length), `${totalKm.toFixed(1)} km total`),
     tile('HR drop', lastRec ? `${lastRec.hrDropFrom! - lastRec.hrDropTo!}` : '--', 'bpm in 1st min of cool-down, latest'),
     tile('Mobility', String(mob.completed.length), `routines · holds ${holdText}`),
@@ -317,7 +345,7 @@ export function renderProgress(els: ProgressEls, trainer: TrainerState) {
   weeklyChart(
     els.weekly,
     weeks.map((wk) => ({ start: dayToDate(wk.day).getTime(), minutes: wk.minutes })),
-    lvl.perWeek * lvl.mainMin,
+    goal,
   );
 }
 

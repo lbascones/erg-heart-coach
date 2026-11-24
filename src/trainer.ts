@@ -40,7 +40,7 @@ export const GOOD_TO_LEVEL_UP = 3;
 export const CHECK_EVERY_DAYS = 28;
 /** The first fitness check comes after this many sessions, once rowing feels familiar. */
 const FIRST_CHECK_AFTER_SESSIONS = 3;
-/** Fitness-check length (main part). */
+/** Fitness-check length: the first part of that day's main set (the rest is normal zone rowing). */
 export const CHECK_MAIN_MIN = 10;
 
 /** Harder pieces with easy rowing between: reps x (workSec hard + easySec easy). */
@@ -66,6 +66,18 @@ export const INTERVALS: IntervalSet[] = [
 export function intervalsFor(level: number): IntervalSet | null {
   if (level < INTERVALS_FROM_LEVEL) return null;
   return INTERVALS[Math.min(INTERVALS.length, level - INTERVALS_FROM_LEVEL + 1) - 1];
+}
+
+/** Main-set minutes of an interval session: it ends right after the last hard piece. */
+export function intervalMinutes(i: IntervalSet): number {
+  return (i.reps * i.workSec + (i.reps - 1) * i.easySec) / 60;
+}
+
+/** Planned main-set minutes for a normal week: one interval session (from level 2), the rest steady. */
+export function weeklyGoalMinutes(level: number): number {
+  const lvl = levelInfo(level);
+  const iv = intervalsFor(level);
+  return iv ? (lvl.perWeek - 1) * lvl.mainMin + intervalMinutes(iv) : lvl.perWeek * lvl.mainMin;
 }
 
 /** E.g. "4 × 1 min harder, 2 min easy between". */
@@ -244,6 +256,24 @@ function checkDue(t: TrainerState, now: number): boolean {
   return now - t.lastCheckAt >= CHECK_EVERY_DAYS * DAY;
 }
 
+/**
+ * Throws away the latest fitness-check score (e.g. it was rowed as a normal workout) so the next session
+ * is a check again. The session itself stays in the history. Returns false if there is no scored check.
+ */
+export function discardLatestCheck(t: TrainerState, history: SessionSummary[]): boolean {
+  const latest = history.filter((s) => s.type === 'check' && !s.checkDiscarded).at(-1);
+  if (!latest) return false;
+  latest.checkDiscarded = true;
+  delete latest.checkWatts;
+  const previous = history.filter((s) => s.type === 'check' && s.checkWatts).at(-1);
+  t.lastCheckAt = previous ? previous.startedAt : null;
+  if (!previous) t.testHr = null;
+  // Make the check due at the next session, even if the first-check rule would wait longer.
+  t.checkAfterSessions = t.sessionsCompleted;
+  saveTrainer(t);
+  return true;
+}
+
 export function testHrFor(t: TrainerState, s: Settings): number {
   return t.testHr ?? Math.round((s.targetLow + s.targetHigh) / 2);
 }
@@ -273,17 +303,19 @@ export function planToday(t: TrainerState, s: Settings, now: number): Today {
     const hr = testHrFor(t, s);
     return {
       kind: 'row',
-      plan: { type: 'check', mainMinutes: CHECK_MAIN_MIN, testHr: hr, level: t.level },
-      text: `Fitness check today: ${CHECK_MAIN_MIN} min holding ${hr} bpm. Keep the damper setting the same as always.`,
+      plan: { type: 'check', mainMinutes: Math.max(CHECK_MAIN_MIN, lvl.mainMin), testHr: hr, level: t.level },
+      text:
+        lvl.mainMin > CHECK_MAIN_MIN
+          ? `Today: ${lvl.mainMin} min, starting with a fitness check: the first ${CHECK_MAIN_MIN} min holding ${hr} bpm, then your zone.`
+          : `Fitness check today: ${CHECK_MAIN_MIN} min holding ${hr} bpm. Keep the damper setting the same as always.`,
     };
   }
   const intervals = intervalsFor(t.level);
   if (intervals && (t.lastIntervalsAt === null || today - dayNumber(t.lastIntervalsAt) >= 7)) {
     // The workout ends right after the last hard piece, so the heart-rate drop is measured from a hard effort.
-    const mainSec = intervals.reps * intervals.workSec + (intervals.reps - 1) * intervals.easySec;
     return {
       kind: 'row',
-      plan: { type: 'intervals', mainMinutes: mainSec / 60, intervals, level: t.level },
+      plan: { type: 'intervals', mainMinutes: intervalMinutes(intervals), intervals, level: t.level },
       text: `Today: intervals, ${describeIntervals(intervals)} (level ${t.level} of ${LEVELS.length}).`,
     };
   }
@@ -325,9 +357,14 @@ export function recordSession(t: TrainerState, s: SessionSummary, fb: Feedback):
   let msg: string;
 
   if (s.type === 'check') {
-    t.lastCheckAt = s.startedAt;
-    t.checkAfterSessions = null;
-    if (t.testHr === null && s.testHr) t.testHr = s.testHr;
+    if (s.checkWatts) {
+      t.lastCheckAt = s.startedAt;
+      t.checkAfterSessions = null;
+      if (t.testHr === null && s.testHr) t.testHr = s.testHr;
+    } else {
+      // Not scored: try again at the next session.
+      t.checkAfterSessions = t.sessionsCompleted;
+    }
     msg = s.checkWatts
       ? `Fitness check recorded: ${s.checkWatts} W at ${s.testHr} bpm. Next check in about 4 weeks.`
       : 'Fitness check finished, but there was not enough steady heart-rate data to score it. We will try again next time.';

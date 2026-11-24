@@ -485,6 +485,8 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .kw-left { color: var(--accent); }
 .kw-right { color: var(--high); }
 .chart h3 em { font-style: normal; opacity: 0.7; }
+#btn-redo-check { float: right; margin: -4px 0 0 8px; padding: 2px 10px; font-size: 0.8rem; }
+#btn-redo-check[hidden] { display: none; }
 #chart-tip {
   position: fixed;
   transform: translate(-50%, -100%);
