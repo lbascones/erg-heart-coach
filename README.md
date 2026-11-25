@@ -64,8 +64,11 @@ The home screen tells you whether today is a rowing day and for how long.
 - **Rest days:** at 3 sessions a week there is always a rest day between sessions; never more than the level's sessions in any 7 days.
 - **Time off (e.g. vacation)** is detected from the date of your last session, even if the app was left running:
   8+ days → back 1 level, 14+ → 2, 21+ → 3, 28+ → 4 (plus a fitness check soon after), 60+ → level 1.
-- **Fitness check** every 4 weeks: 10 min holding the same test heart rate; the last 5 min are scored.
-  More watts at the same heart rate = fitter. Keep the damper setting the same every time.
+- **Fitness check** every 4 weeks, inside a normal session: the first 10 min hold the same test heart rate (the
+  last 5 of them are scored), then the rest of the session is in your zone. More watts at the same heart rate =
+  fitter. A due check waits for the first session of the week (normally Monday), so it always starts rested after
+  the weekend; an unscored check is redone the next week. Check days count toward leveling up like any session.
+  Keep the damper setting the same every time.
 - **Progress screen:** fitness-check results, watts in your zone, heart-rate drop in the first minute of cool-down (steady sessions),
   minutes per week vs. your level's goal. **Export data** regularly: history lives in the browser.
 

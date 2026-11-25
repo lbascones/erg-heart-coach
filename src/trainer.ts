@@ -250,14 +250,28 @@ export function nextAllowedDay(t: TrainerState, now: number): number {
   return Math.max(day, today);
 }
 
+/**
+ * A check is due by the rules below, and is then held for the first session of the week (normally Monday),
+ * so every check starts rested after the weekend and scores compare fairly from month to month.
+ */
 function checkDue(t: TrainerState, now: number): boolean {
+  return checkOwed(t, now) && firstSessionOfWeek(t, now);
+}
+
+function checkOwed(t: TrainerState, now: number): boolean {
   if (t.checkAfterSessions !== null && t.sessionsCompleted >= t.checkAfterSessions) return true;
   if (t.lastCheckAt === null) return t.sessionsCompleted >= FIRST_CHECK_AFTER_SESSIONS;
   return now - t.lastCheckAt >= CHECK_EVERY_DAYS * DAY;
 }
 
+/** No session yet since this week's Monday (if Monday is missed, the week's first session takes the check). */
+function firstSessionOfWeek(t: TrainerState, now: number): boolean {
+  const monday = dayNumber(now) - ((new Date(now).getDay() + 6) % 7);
+  return !t.recentSessions.some((x) => dayNumber(x) >= monday);
+}
+
 /**
- * Throws away the latest fitness-check score (e.g. it was rowed as a normal workout) so the next session
+ * Throws away the latest fitness-check score (e.g. it was rowed as a normal workout) so the next week's first session
  * is a check again. The session itself stays in the history. Returns false if there is no scored check.
  */
 export function discardLatestCheck(t: TrainerState, history: SessionSummary[]): boolean {
@@ -268,7 +282,7 @@ export function discardLatestCheck(t: TrainerState, history: SessionSummary[]): 
   const previous = history.filter((s) => s.type === 'check' && s.checkWatts).at(-1);
   t.lastCheckAt = previous ? previous.startedAt : null;
   if (!previous) t.testHr = null;
-  // Make the check due at the next session, even if the first-check rule would wait longer.
+  // Make the check due again (at the first session of a week), even if the first-check rule would wait longer.
   t.checkAfterSessions = t.sessionsCompleted;
   saveTrainer(t);
   return true;
@@ -362,18 +376,19 @@ export function recordSession(t: TrainerState, s: SessionSummary, fb: Feedback):
       t.checkAfterSessions = null;
       if (t.testHr === null && s.testHr) t.testHr = s.testHr;
     } else {
-      // Not scored: try again at the next session.
+      // Not scored: try again at the next check opportunity (the first session of next week).
       t.checkAfterSessions = t.sessionsCompleted;
     }
-    msg = s.checkWatts
-      ? `Fitness check recorded: ${s.checkWatts} W at ${s.testHr} bpm. Next check in about 4 weeks.`
-      : 'Fitness check finished, but there was not enough steady heart-rate data to score it. We will try again next time.';
-    if (tooHard) {
-      t.level = Math.max(1, t.level - 1);
-      t.goodStreak = 0;
-      msg += ` That felt hard, so we'll ease off to level ${t.level}.`;
-    }
-  } else if (s.type === 'free') {
+  }
+  // A check day is a full-length steady session, so it counts toward leveling up like any other.
+  const checkMsg =
+    s.type !== 'check'
+      ? ''
+      : s.checkWatts
+        ? `Fitness check recorded: ${s.checkWatts} W at ${s.testHr} bpm. Next check in about 4 weeks, on a Monday. `
+        : 'Fitness check finished, but there was not enough steady heart-rate data to score it. We will try again next Monday. ';
+
+  if (s.type === 'free') {
     msg = 'Free row logged. It counts toward rest days, but not toward leveling up.';
   } else {
     const ratio = s.plannedMainSec ? s.mainSec / s.plannedMainSec : 1;
@@ -412,6 +427,7 @@ export function recordSession(t: TrainerState, s: SessionSummary, fb: Feedback):
         msg = 'Session logged. Same plan next time.';
       }
     }
+    msg = checkMsg + msg;
   }
   saveTrainer(t);
   return msg;

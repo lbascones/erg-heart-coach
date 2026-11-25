@@ -54,7 +54,7 @@ const alarm = new Alarm();
 alarm.enabled = settings.sound;
 const session = new Session(settings);
 const trainer = loadTrainer();
-// Older versions marked an unscored fitness check as done (next one in 4 weeks): redo it at the next session instead.
+// Older versions marked an unscored fitness check as done (next one in 4 weeks): redo it (at the first session of a week) instead.
 {
   const history = loadHistory();
   const last = history.filter((s) => s.type === 'check' && !s.checkDiscarded).at(-1);
@@ -961,7 +961,7 @@ redoCheckBtn.addEventListener('click', () => {
   const latest = loadHistory().filter((s) => s.type === 'check' && !s.checkDiscarded).at(-1);
   if (!latest) return;
   const when = new Date(latest.startedAt).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
-  if (!confirm(`Discard the fitness check from ${when}? Its score is removed and your next session is a fitness check again.`)) return;
+  if (!confirm(`Discard the fitness check from ${when}? Its score is removed and the check is redone at the first session of next week (normally Monday).`)) return;
   const history = loadHistory();
   if (!discardLatestCheck(trainer, history)) return;
   saveHistory(history);
