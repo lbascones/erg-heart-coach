@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- Added to the iPad's Home Screen, it opens full-screen like an app. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="Stretching" />
+    <title>Stretching</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧘</text></svg>" />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body class="mobility-page">
+    <main id="mp-home">
+      <h1>Mobility &amp; stretching</h1>
+      <p id="mp-sync" class="fine-print">Connecting to the laptop…</p>
+      <button id="btn-mp-start" class="primary huge">Start the routine</button>
+      <div id="mp-stats"></div>
+      <p class="fine-print">
+        Keep the screen on while you stretch: <b>Settings → Display &amp; Brightness → Auto-Lock → Never</b>.
+      </p>
+    </main>
+    <script type="module" src="/src/mobility-page.ts"></script>
+  </body>
+</html>

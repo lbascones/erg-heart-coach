@@ -567,3 +567,18 @@ button.rec { color: #ff6b6b; border-color: #ff6b6b; }
 .mb-kw-inputs { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
 .mb-kw-inputs label { display: flex; flex-direction: column; gap: 4px; color: var(--text-muted); }
 .mb-kw-inputs input { width: 7em; font-size: 1.4rem; padding: 6px 8px; }
+
+/* ---------- Stretching page on its own (mobility.html, for the iPad) ---------- */
+body.mobility-page { background: #11161d; }
+#mp-home {
+  height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 22px; padding: 24px; text-align: center;
+}
+#mp-home h1 { margin: 0; font-size: clamp(2rem, 6vw, 3rem); }
+#mp-stats { display: grid; gap: 14px; font-size: 1.25rem; }
+#mp-stats div { display: flex; flex-direction: column; gap: 2px; }
+/* Portrait (iPad held upright): sketches above the instructions. */
+@media (orientation: portrait) {
+  .mb-body { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; gap: 14px; }
+  .mb-card { height: calc(100% - 24px); width: calc(100% - 24px); padding: 16px; }
+}

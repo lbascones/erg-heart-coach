@@ -11,7 +11,7 @@ import { diag, saveDiagnostics } from './diagnostics';
 import { drawForceCurves, drawSessionHr } from './charts';
 import { HeartRateTracker, ZONE_LABEL, type Zone } from './heartrate';
 import { remindersEnabled, scheduleReminder, sendTestNotification } from './notify';
-import { MobilityRoutine, routineMinutes } from './mobility';
+import { MobilityRoutine, routineMinutes, syncMobility } from './mobility';
 import { attachTooltips, renderProgress } from './progress';
 import { VideoPlayer } from './video';
 import { loadHistory, saveHistory, Session, updateSession, type Phase, type SessionSummary } from './session';
@@ -949,7 +949,14 @@ $('btn-progress').addEventListener('click', () => {
   el.progressOverlay.hidden = false;
   showBackupStatus();
   requestAnimationFrame(showProgress);
+  // Stretching done on the iPad: fetch it, and redraw if anything new came in.
+  const before = localStorage.getItem('rowing.mobility.v1');
+  void syncMobility().then(() => {
+    if (localStorage.getItem('rowing.mobility.v1') !== before && !el.progressOverlay.hidden) showProgress();
+  });
 });
+// Keep the laptop's copy of the stretching progress (part of its backups) up to date.
+void syncMobility();
 redoCheckBtn.addEventListener('click', () => {
   const latest = loadHistory().filter((s) => s.type === 'check' && !s.checkDiscarded).at(-1);
   if (!latest) return;

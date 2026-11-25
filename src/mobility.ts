@@ -41,10 +41,57 @@ function saveMobility(s: MobilityState) {
   }
 }
 
+// ---------- Shared with the laptop's server, so the laptop and the iPad keep one record ----------
+const sameDayKey = (t: number) => new Date(t).toDateString();
+
+/** Union of two records (same rule as server/mobility.js): one routine per day, one measurement per time. */
+export function mergeMobility(a: Partial<MobilityState> | null, b: Partial<MobilityState> | null): MobilityState {
+  const byDay = new Map<string, number>();
+  for (const t of [...(a?.completed ?? []), ...(b?.completed ?? [])]) {
+    if (typeof t !== 'number') continue;
+    const d = sameDayKey(t);
+    if (!byDay.has(d) || t < byDay.get(d)!) byDay.set(d, t);
+  }
+  const byTime = new Map<number, KneeWall>();
+  for (const m of [...(a?.kneeWall ?? []), ...(b?.kneeWall ?? [])]) {
+    if (m && typeof m.t === 'number') byTime.set(m.t, { t: m.t, left: m.left, right: m.right });
+  }
+  return {
+    completed: [...byDay.values()].sort((x, y) => x - y),
+    kneeWall: [...byTime.values()].sort((x, y) => x.t - y.t),
+  };
+}
+
+/**
+ * Brings this screen and the laptop's server in step: fetches the saved record, merges it with this
+ * browser's, keeps the result here and sends it back if this screen had something new.
+ * Returns false when the server can't be reached (progress then stays here and is sent next time).
+ */
+export async function syncMobility(): Promise<boolean> {
+  try {
+    const res = await fetch('/api/mobility', { cache: 'no-store' });
+    if (!res.ok) return false;
+    const server = (await res.json()) as MobilityState;
+    const merged = mergeMobility(loadMobility(), server);
+    saveMobility(merged);
+    if (JSON.stringify(merged) !== JSON.stringify(mergeMobility(server, null))) {
+      const post = await fetch('/api/mobility', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ app: 'rowing-mobility', ...merged }),
+      });
+      if (!post.ok) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Holds start at each exercise's base time and get 5 s longer every 3 counted routines (about a week), up to 60 s. */
 const HOLD_STEP_SEC = 5;
-const ROUTINES_PER_STEP = 3;
-const HOLD_MAX_SEC = 60;
+export const ROUTINES_PER_STEP = 3;
+export const HOLD_MAX_SEC = 60;
 export function holdBonus(s: MobilityState = loadMobility()): number {
   return HOLD_STEP_SEC * Math.floor(s.completed.length / ROUTINES_PER_STEP);
 }
@@ -445,11 +492,16 @@ export class MobilityRoutine {
   private measureSaved = false;
   private readonly $ = (id: string) => document.getElementById(id) as HTMLElement;
 
-  /** @param onChange called after progress is saved (to back it up). */
+  /**
+   * @param onChange called after progress is saved (to back it up).
+   * @param onClose called when the routine screen closes.
+   */
   constructor(
     private chime: () => void,
     private onChange: () => void = () => {},
+    private onClose: () => void = () => {},
   ) {
+    if (!document.getElementById('mobility-overlay')) document.body.insertAdjacentHTML('beforeend', MOBILITY_HTML);
     this.$('mb-extra').addEventListener('click', (e) => {
       const t = e.target as HTMLElement;
       if (t.id === 'btn-mb-measure') {
@@ -483,6 +535,10 @@ export class MobilityRoutine {
     this.measureSaved = false;
     this.measuring = false;
     this.go(0);
+    // Pick up routines done on the other screen (they set the hold times), then show them.
+    void syncMobility().then(() => {
+      if (this.phase === 'waiting' && this.i === 0) this.go(0);
+    });
     this.lastTick = Date.now();
     clearInterval(this.timer);
     this.timer = window.setInterval(() => this.tick(), 200);
@@ -492,6 +548,7 @@ export class MobilityRoutine {
     this.setDemo(false, false);
     clearInterval(this.timer);
     this.$('mobility-overlay').hidden = true;
+    this.onClose();
   }
 
   private setDemo(on: boolean, render = true) {
@@ -553,7 +610,7 @@ export class MobilityRoutine {
       s.completed.push(now);
       saveMobility(s);
       this.counted = true;
-      this.onChange();
+      void syncMobility().then(() => this.onChange());
     }
     this.measuring = measureDue(s, now);
   }
@@ -572,7 +629,7 @@ export class MobilityRoutine {
     saveMobility(s);
     this.measuring = false;
     this.measureSaved = true;
-    this.onChange();
+    void syncMobility().then(() => this.onChange());
     this.render();
   }
 
@@ -667,3 +724,36 @@ export class MobilityRoutine {
     this.renderTimer();
   }
 }
+
+/** The routine screen; added to the page by MobilityRoutine (used by the main app and the iPad page). */
+const MOBILITY_HTML = `
+<div id="mobility-overlay" class="overlay" hidden>
+      <div class="mb-card">
+        <div class="mb-top">
+          <span id="mb-step" class="m-label"></span>
+          <span class="mb-top-buttons">
+            <button id="btn-mb-demo" class="small">Demo video</button>
+            <button id="btn-mb-end" class="ghost small">End</button>
+          </span>
+        </div>
+        <div class="mb-body">
+          <div id="mb-sketch"></div>
+          <div class="mb-info">
+            <h2 id="mb-name"></h2>
+            <div id="mb-side"></div>
+            <div id="mb-how"></div>
+            <ul id="mb-cues"></ul>
+            <div id="mb-extra"></div>
+            <div id="mb-timer-label" class="m-label"></div>
+            <div id="mb-timer"></div>
+            <div id="mb-next"></div>
+          </div>
+        </div>
+        <div class="mb-buttons">
+          <button id="btn-mb-back" class="big">Back</button>
+          <button id="btn-mb-start" class="big">Start</button>
+          <button id="btn-mb-next" class="big">Skip</button>
+        </div>
+      </div>
+    </div>
+`;

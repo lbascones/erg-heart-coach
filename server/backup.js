@@ -67,7 +67,7 @@ function send(res, status, body, type = 'application/json') {
 let afterBackupRunning = false;
 /** A file was written while a copy was running: copy once more when it finishes. */
 let afterBackupAgain = false;
-function runAfterBackup() {
+export function runAfterBackup() {
   const cmd = process.env.ROWING_AFTER_BACKUP;
   if (!cmd) return;
   if (afterBackupRunning) {

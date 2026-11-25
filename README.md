@@ -280,6 +280,22 @@ song** (taps never open YouTube itself).
   "Workout done · Cool-down"; the heart-rate drop is measured and shown in the progress box as usual.
 - The video is turned down while the over-limit or no-signal alarm sounds.
 
+## Stretching on the iPad
+
+The mobility routine also runs on its own page, for a tablet you can carry to the mat, the wall or the bench.
+The laptop serves it, so the laptop must be on and the tablet on the same Wi-Fi.
+
+1. On the iPad, open Safari at **http://lazarus.local:4173/mobility** (if that doesn't load, use the laptop's
+   address instead: `hostname -I` in a laptop terminal, e.g. http://192.168.1.23:4173/mobility).
+2. Tap Share → **Add to Home Screen**. From then on it opens full-screen from its icon.
+3. Set **Settings → Display & Brightness → Auto-Lock → Never**, so the screen stays on through the holds.
+
+Progress (routines done, which set the hold times, and knee-to-wall measurements) is kept on the laptop in
+`~/rowing-backups/mobility.json` and shared by both screens; it is copied to Google Drive with the backups. If
+the laptop can't be reached, the iPad keeps it and sends it next time. Other devices on the home network can
+open the app's pages and the stretching progress only; backups and diagnostics are laptop-only, and addresses
+outside the home network are refused. The build targets Safari 15 (iPad mini 4 on iPadOS 15.8).
+
 ## Diagnostics
 
 When something doesn't work with the monitor (no data, dropouts, odd numbers), record a diagnostics file:
